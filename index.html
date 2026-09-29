@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hollow Blocks</title>
+<meta name="description" content="Buuin ang bahay! The falling-block classic, Pinoy style: stack kawayan, hollow blocks, ladrilyo, yero, plywood, baldosa and adobe, clear four rows at once for a BAYANIHAN, and outlast the flood in Bagyo mode.">
+<meta property="og:title" content="Hollow Blocks: Buuin ang bahay!">
+<meta property="og:description" content="Stack the materials, clear the rows, and raise the building floor by floor. Four at once is a BAYANIHAN.">
+<meta property="og:image" content="https://hollow-blocks.vercel.app/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1a1720">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Hollow Blocks">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root { --bg: #1a1720; --ink: #fff8e1; --muted: #d8d0c0; --gold: #ffd23f; --orange: #ff9f43; --pink: #ff8ae2; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; color: var(--ink); font: 16px/1.45 "Baloo 2", system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { background: radial-gradient(ellipse at 50% 0%, #3a3040 0%, #1f1a24 55%, #0c0a0e 100%) fixed; background-color: var(--bg); }
+.wrap { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 16px; gap: 8px; }
+.stage { position: relative; width: min(100%, 520px, calc((100vh - 44px) * 432 / 560)); aspect-ratio: 432 / 560; touch-action: none; user-select: none; -webkit-user-select: none; border-radius: 12px; overflow: hidden; box-shadow: 0 12px 44px rgba(0,0,0,.6), 0 0 0 2px rgba(255,210,63,.25); }
+body.touch.playing .stage { width: min(100%, 520px, calc((100vh - 150px) * 432 / 560)); }
+canvas { display: block; width: 100%; height: 100%; }
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 9px; padding: 18px; text-align: center; background: rgba(20, 16, 24, 0.86); overflow-y: auto; }
+[hidden] { display: none !important; }
+.logo { margin: 0; font-size: clamp(40px, 11vw, 62px); line-height: .9; font-weight: 800; color: var(--gold); text-shadow: 0 5px 0 #8a5a1f, 0 0 34px rgba(255,210,63,.35); }
+.logo small { display: block; margin-top: 8px; font-size: .4em; color: var(--orange); text-shadow: none; letter-spacing: .06em; }
+.tag { margin: 0; color: var(--muted); max-width: 30em; }
+h2 { margin: 0; font-size: clamp(22px, 5.6vw, 32px); color: var(--gold); line-height: 1.15; }
+.row, .modes { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+button { font: inherit; font-weight: 700; color: var(--ink); background: rgba(80, 60, 50, .9); border: 2px solid rgba(255, 210, 63, .45); border-radius: 12px; padding: 8px 16px; cursor: pointer; min-height: 44px; }
+button:hover { background: rgba(104, 78, 64, .95); }
+button:focus-visible { outline: 3px solid var(--pink); outline-offset: 2px; }
+button.primary { background: var(--gold); color: #3a2a0a; border-color: var(--gold); box-shadow: 0 4px 0 #b8860b; }
+button.sound { min-width: 44px; padding: 6px 10px; font-size: 18px; }
+button.calm { font-size: 13px; min-height: 36px; padding: 2px 12px; }
+.modes button { min-height: 38px; padding: 4px 14px; font-size: 15px; }
+.modes button[aria-pressed=true] { background: var(--orange); color: #3a1a0a; border-color: var(--orange); }
+.muted { color: var(--muted); margin: 0; font-size: 14px; }
+.mats { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 10px; font-size: 13px; color: var(--muted); max-width: 26em; margin: 0; padding: 0; list-style: none; }
+.mats li::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--c); margin-right: 5px; vertical-align: -1px; }
+.keys { color: var(--muted); font-size: 13px; margin: 0; }
+kbd { background: #3a3040; border: 1px solid #6a5a60; border-radius: 4px; padding: 0 6px; font: 12px ui-monospace, monospace; }
+.score { font-size: clamp(40px, 11vw, 60px); font-weight: 800; color: var(--gold); line-height: 1; }
+.new { color: var(--pink); font-weight: 800; }
+.note { max-width: 26em; margin: 0; padding: 12px 16px; border-radius: 14px; background: rgba(255,248,225,.08); border: 1px dashed rgba(255,210,63,.5); font-size: 16px; }
+.note b { color: var(--gold); }
+.toast { position: absolute; left: 50%; top: 40%; transform: translateX(-50%); background: rgba(20, 16, 24, .95); border: 2px solid var(--gold); border-radius: 12px; padding: 6px 14px; font-weight: 700; font-size: 13px; pointer-events: none; width: max-content; max-width: 86%; text-align: center; z-index: 3; }
+.corner { position: absolute; right: 2%; bottom: 1%; z-index: 2; }
+.corner button { min-height: 26px; padding: 0 10px; font-size: 12px; background: rgba(20,16,24,.75); }
+.pad { display: none; gap: 6px; width: min(100%, 520px); justify-content: center; flex-wrap: nowrap; }
+body.touch.playing .pad { display: flex; }
+.pad button { flex: 1 1 0; min-width: 0; padding: 0; height: 56px; font-size: 20px; border-radius: 14px; background: rgba(80, 60, 50, .8); }
+.pad [data-act="hard"] { background: rgba(196, 85, 58, .9); }
+.pad [data-act="hold"] { font-size: 12px; }
+.help { color: var(--muted); font-size: 13px; margin: 0; text-align: center; }
+.help a { color: var(--gold); }
+@media (max-width: 560px) { .screen { position: fixed; inset: 8px; z-index: 5; border-radius: 14px; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="stage" id="stage">
+    <canvas id="board" width="432" height="560" role="img" aria-label="A construction site: a board of falling building materials framed by bamboo scaffolding, with a foreman in a hard hat"></canvas>
+    <div class="toast" id="toast" role="status" hidden></div>
+
+    <section class="screen" id="title">
+      <h1 class="logo">HOLLOW BLOCKS<small>Buuin ang bahay!</small></h1>
+      <p class="tag">Isalansan ang mga materyales, punuin ang mga hanay, at itayo ang bahay palapag-palapag. Apat nang sabay? BAYANIHAN!</p>
+      <div class="modes" role="group" aria-label="Mode">
+        <button type="button" data-mode="bahay">Bahay</button>
+        <button type="button" data-mode="deadline">Deadline</button>
+        <button type="button" data-mode="bagyo">Bagyo</button>
+      </div>
+      <p class="muted" id="mode-note"></p>
+      <div class="modes" role="group" aria-label="Difficulty">
+        <button type="button" data-diff="madali">Madali</button>
+        <button type="button" data-diff="katamtaman">Katamtaman</button>
+        <button type="button" data-diff="mahirap">Mahirap</button>
+      </div>
+      <p class="muted" id="diff-note"></p>
+      <div class="row">
+        <button type="button" class="primary" id="play">Trabaho na! · Play</button>
+        <button type="button" class="sound"></button>
+      </div>
+      <p class="muted" id="title-best"></p>
+      <ul class="mats">
+        <li style="--c:#b9c95a">Kawayan</li><li style="--c:#b3b8bd">Hollow block</li><li style="--c:#c4553a">Ladrilyo</li><li style="--c:#6fb3c4">Yero</li><li style="--c:#e0a860">Plywood</li><li style="--c:#4a7fd6">Baldosa</li><li style="--c:#d98a3a">Adobe</li>
+      </ul>
+      <p class="keys"><kbd>←</kbd><kbd>→</kbd> galaw · <kbd>↑</kbd>/<kbd>X</kbd> ikot · <kbd>Z</kbd> pabalik · <kbd>↓</kbd> dahan · <kbd>Space</kbd> bagsak · <kbd>C</kbd>/<kbd>Shift</kbd> imbak · <kbd>P</kbd> hinto</p>
+      <button type="button" class="calm" aria-pressed="false"></button>
+    </section>
+
+    <section class="screen" id="safety" hidden>
+      <h2>Paalala ni Kapatas</h2>
+      <p class="note"><b>Kapatas:</b> "Sa totoong construction site, laging naka-hard hat, at bawal ang bata doon: delikado! Dito lang tayo maglaro ng hollow blocks."</p>
+      <button type="button" class="primary" id="safety-ok">Opo, Kapatas! · Let's go</button>
+    </section>
+
+    <section class="screen" id="pause" hidden>
+      <h2>Merienda muna · Paused</h2>
+      <div class="row">
+        <button type="button" class="primary" id="resume">Tuloy · Resume</button>
+        <button type="button" class="sound"></button>
+        <button type="button" class="menu">Menu</button>
+      </div>
+      <button type="button" class="calm" aria-pressed="false"></button>
+    </section>
+
+    <section class="screen" id="results" hidden>
+      <h2 id="results-title"></h2>
+      <div class="score" id="results-score"></div>
+      <p id="results-best"></p>
+      <p class="muted" id="results-stats"></p>
+      <p class="muted" id="results-tip"></p>
+      <div class="row">
+        <button type="button" class="primary" id="retry">Ulit · Again</button>
+        <button type="button" class="menu">Menu</button>
+      </div>
+    </section>
+
+    <div class="corner" id="pause-btn" hidden><button type="button" aria-label="Pause">❚❚ Hinto</button></div>
+  </div>
+  <div class="pad" aria-label="Controls">
+    <button type="button" data-act="ccw" aria-label="Turn anticlockwise">⟲</button>
+    <button type="button" data-act="left" aria-label="Left">◀</button>
+    <button type="button" data-act="down" aria-label="Soft drop">▼</button>
+    <button type="button" data-act="right" aria-label="Right">▶</button>
+    <button type="button" data-act="cw" aria-label="Turn clockwise">⟳</button>
+    <button type="button" data-act="hard" aria-label="Hard drop">⤓</button>
+    <button type="button" data-act="hold" aria-label="Hold">IMBAK</button>
+  </div>
+  <p class="help">A falling-block game by <a href="https://kon2raya.netlify.app" target="_blank" rel="noopener">Lemmuel Turaya</a> · sa totoong site, laging naka-hard hat · <a href="https://tambayan-arcade.vercel.app/">More games</a> · <a href="https://tambayan-arcade.vercel.app/#support">☕ Support</a></p>
+</main>
+<script>if (matchMedia('(pointer: coarse)').matches) document.body.classList.add('touch');</script>
+<script type="module" src="src/main.mjs"></script>
+</body>
+</html>

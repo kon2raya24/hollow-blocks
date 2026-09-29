@@ -1,0 +1,16 @@
+{
+  "name": "Hollow Blocks: Buuin ang bahay!",
+  "short_name": "Hollow Blocks",
+  "description": "The falling-block classic, Pinoy style: stack the building materials, clear the rows, raise the building floor by floor.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1720",
+  "theme_color": "#1a1720",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
