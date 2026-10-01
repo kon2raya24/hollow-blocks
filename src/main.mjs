@@ -1,11 +1,14 @@
 // The page: screens, modes, settings, input (keys, touch gestures and buttons, a controller), the loop,
 // sound, saves and hints. The rules live in game.mjs; the 3D site in view3d.mjs, and if WebGL won't
 // start, the old 2D drawing in render.mjs takes over and the game plays the same.
-import { createGame, step, MODES, DIFFICULTY } from './game.mjs';
+import { createGame, step, MODES, DIFFICULTY, cellsOf, pendingRows } from './game.mjs';
 import { bot } from './bot.mjs';
+import { createMatch, matchStep, LADDER, LEVELS, rivalById, ladderOpen } from './versus.mjs';
+import { createRecorder, record, encode, decode, startPlayback, playTick, runToEnd } from './replay.mjs';
+import { LESSONS, lessonById, lessonFor, lessonGame, judge, createCoach, coachTick } from './training.mjs';
 import { createAudio } from './audio.mjs';
 import { CONTRACTS, BARANGAYS, contractById, starsFor, unlocked, brgyStars, describe } from './contracts.mjs';
-import { icon } from './icons.mjs';
+import { icon, portrait } from './icons.mjs';
 import { xpFor, rankOf, RANKS, STYLES, styleOpen, MEDALS, newMedals, addStats, dateKey, dailySeed, shareText } from './progress.mjs';
 
 const Q = new URLSearchParams(location.search);
@@ -45,8 +48,22 @@ const SAYS = {
   tool: ['Gamitin mo yan!', 'Ayos ang gamit!', 'Diskarte ng tunay na mason!'],
   lindol: ['Lindol! Kapit!', 'Yumayanig! Ingat!'],
   ceremony: ['Tapos ang bahay! Salamat sa lahat!', 'Bahay na! Kain tayo mamaya!'],
+  retry: ['Ulitin natin. Kaya mo yan!', 'Sige, isa pa!', 'Dahan-dahan lang. Ulit!'],
 };
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
+// The controls: actions to keys (up to three each) and to controller buttons. Movement on the d-pad and
+// the left stick stays put; everything else can be moved.
+const DEF_KEYS = { left: ['ArrowLeft', 'a'], right: ['ArrowRight', 'd'], down: ['ArrowDown', 's'], hard: [' '], cw: ['ArrowUp', 'x', 'w'], ccw: ['z', 'q'], r180: ['v'], hold: ['c', 'Shift'], tool: ['e'], pause: ['p', 'Escape'] };
+const DEF_PAD = { cw: [0], ccw: [1], tool: [2], hold: [3, 4, 5, 6, 7], hard: [12], r180: [], pause: [9] };
+const DEF_RULES = { next: 5, das: null, arr: null, soft: null, rot180: false, hold: true, coach: false, ghost: true };
+const ACT_NAME = { left: 'Kaliwa · Left', right: 'Kanan · Right', down: 'Dahan · Soft drop', hard: 'Bagsak · Hard drop', cw: 'Ikot · Turn', ccw: 'Pabalik · Turn back', r180: 'Ikot 180°', hold: 'Imbak · Hold', tool: 'Gamit · Tool', pause: 'Hinto · Pause' };
+const PAD_NAME = ['✕ / A', '○ / B', '□ / X', '△ / Y', 'L1 / LB', 'R1 / RB', 'L2 / LT', 'R2 / RT', 'Share / Back', 'Options / Start', 'L3', 'R3', 'D-pad ↑', 'D-pad ↓', 'D-pad ←', 'D-pad →'];
+function validMap(v, def, ok) {
+  const out = {};
+  for (const [a, d] of Object.entries(def)) out[a] = v && Array.isArray(v[a]) && v[a].every(ok) ? v[a].slice(0, a === 'hold' && def === DEF_PAD ? 5 : 3) : d.slice();
+  return out;
+}
+const keyName = (k) => ({ ' ': 'Space', ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', Escape: 'Esc' }[k] || (k.length === 1 ? k.toUpperCase() : k));
 const touch = matchMedia('(pointer: coarse)').matches;
 const saved = store.get() || {};
 const data = {
@@ -58,6 +75,10 @@ const data = {
   // progression (added in v4; older saves start from zero)
   xp: Number.isFinite(saved.xp) ? saved.xp : 0, medals: Array.isArray(saved.medals) ? saved.medals : [], stats: saved.stats && typeof saved.stats === 'object' ? saved.stats : {},
   stars: saved.stars && typeof saved.stars === 'object' ? saved.stars : {}, daily: saved.daily && typeof saved.daily === 'object' ? saved.daily : {}, style: STYLES.some((x) => x.id === saved.style) ? saved.style : 'apartment',
+  // v6: modern controls (null: as the difficulty has it), key and controller maps, the ladder, lessons
+  v: 6, rules: { ...DEF_RULES, ...(saved.rules && typeof saved.rules === 'object' ? saved.rules : {}) },
+  keys: validMap(saved.keys, DEF_KEYS, (k) => typeof k === 'string'), pad: validMap(saved.pad, DEF_PAD, (b) => Number.isInteger(b) && b >= 0 && b < 20),
+  vs: { beaten: Array.isArray(saved.vs?.beaten) ? saved.vs.beaten : [], wins: Number.isFinite(saved.vs?.wins) ? saved.vs.wins : 0 }, lessons: Array.isArray(saved.lessons) ? saved.lessons : [],
 };
 if (!MODES[data.mode]) data.mode = 'bahay';
 for (const el of document.querySelectorAll('[data-icon]')) el.innerHTML = icon(el.dataset.icon, el.closest('.pad') ? 30 : 20);
@@ -75,33 +96,69 @@ const A = createAudio();
 A.setMuted(data.muted); A.setMix(data.opt);
 
 let mode = 'title', game = null, job = null; // job: the contract being played
+let match = null, vsPick = null, lesson = null, coach = null, rec = null, ghost = null, viewer = null, capture = null;
+let lessonEnd = 0; // ticks left before a lesson's verdict shows
 let demo = newDemo();
 function newDemo() { return createGame({ seed: seed(), mode: 'bahay', difficulty: 'madali' }); }
 
-const SCREENS = ['title', 'safety', 'pause', 'results', 'settings', 'map', 'brief', 'stats', 'how', 'rankup'];
+const SCREENS = ['title', 'safety', 'pause', 'results', 'settings', 'map', 'brief', 'stats', 'how', 'rankup', 'vs', 'rival', 'lessons', 'lesson', 'lessondone', 'replays', 'keys'];
 function show(name) {
   for (const id of SCREENS) { const el = $(id), on = id === name; if (on && el.hidden) { el.classList.remove('in'); void el.offsetWidth; el.classList.add('in'); } el.hidden = !on; }
   if (name) { toasts.length = 0; $('toast').hidden = true; $('big').hidden = true; bigT = 0; }
-  $('pause-btn').hidden = name !== null;
+  $('pause-btn').hidden = name !== null || mode === 'replay';
   $('hud').hidden = !(name === null || name === 'pause');
   $('tools').hidden = !(game && game.toolsOn);
-  document.body.classList.toggle('playing', name === null);
+  $('rbar').hidden = !(name === null && mode === 'replay');
+  $('lesson-corner').hidden = !(name === null && lesson && mode === 'play');
+  if (name !== null || mode === 'replay') { $('ghostbar').hidden = true; $('finesse').hidden = true; $('rbubble').hidden = true; }
+  document.body.classList.toggle('playing', name === null && mode !== 'replay');
+  document.body.classList.toggle('replaying', name === null && mode === 'replay');
   const first = name && ($(name).querySelector('button.primary') || $(name).querySelector('button'));
   if (first) first.focus({ preventScroll: true });
   insets();
 }
 function insets() { if (view) view.setInsets(touch ? 66 : 76, touch && mode === 'play' ? 86 : 14); }
 
+// The rule options from the settings, leaving out whatever is on its default so it stays the difficulty's.
+function ruleOpts() {
+  const r = data.rules, o = {};
+  if (r.das !== null) o.das = r.das; if (r.arr !== null) o.arr = r.arr; if (r.soft !== null) o.soft = r.soft;
+  if (r.rot180) o.rot180 = true; if (r.hold === false) o.hold = false; if (r.next !== 5) o.next = r.next;
+  return Object.keys(o).length ? o : null;
+}
 function start() {
   A.start();
   if (!data.safety && !AUTOPLAY) { mode = 'safety'; show('safety'); return; }
   if (data.mode === 'proyekto' && !job) { openMap(); return; }
-  const daily = data.mode === 'daily';
-  game = createGame({ seed: daily ? dailySeed(dateKey()) : seed(), mode: data.mode, difficulty: daily || data.mode === 'proyekto' ? 'katamtaman' : data.difficulty, contract: data.mode === 'proyekto' ? job : null });
+  if (data.mode === 'versus' && !vsPick) { openVs(); return; }
+  if (data.mode === 'training' && !lesson) { openLessons(); return; }
+  if (data.mode !== 'training') lesson = null;
+  const daily = data.mode === 'daily', sd = daily ? dailySeed(dateKey()) : seed(), opts = ruleOpts();
+  match = null; ghost = null; viewer = null; lessonEnd = 0;
+  if (data.mode === 'versus') {
+    match = createMatch({ seed: sd, rival: vsPick, opts });
+    game = match.a;
+    rec = createRecorder({ v: 1, vs: vsPick, seed: sd, opts });
+    rivalSays('start', true);
+  } else if (data.mode === 'training') {
+    game = lessonGame(lesson, opts); rec = null;
+    $('lesson-tip').textContent = lesson.tip;
+  } else {
+    const diff = daily || data.mode === 'proyekto' ? 'katamtaman' : data.difficulty;
+    game = createGame({ seed: sd, mode: data.mode, difficulty: diff, contract: data.mode === 'proyekto' ? job : null, opts });
+    rec = createRecorder({ v: 1, mode: data.mode, diff, seed: sd, job: data.mode === 'proyekto' && job ? job.id : undefined, opts });
+    if (data.rules.ghost && (data.mode === 'deadline' || data.mode === 'karera')) loadGhost(game, bestKey());
+  }
+  if (view) view.setVersus(!!match, match ? match.prof : null);
+  coach = lesson || data.rules.coach ? createCoach(data.rules.rot180) : null;
+  $('finesse').hidden = true;
   toolsKey = '';
   if (R) R.reset();
   mode = 'play'; clearInput(); show(null); hudKey = ''; sinceI = 0;
-  big(job && data.mode === 'proyekto' ? job.name : MODES[data.mode].name, job && data.mode === 'proyekto' ? describe(job).goal : { deadline: '40 hanay, bilisan!', bagyo: 'Tumataas ang baha!', karera: 'Dalawang minuto. Kita, kita, kita!', daily: `Daily ${dateKey()} · pareho para sa lahat` }[data.mode] || 'Buuin ang bahay!', 1.6);
+  if (match) big('LABAN!', `vs ${match.prof.name}`, 1.6);
+  else if (lesson) big(lesson.name, 'Pagsasanay · Sundan ang gintong anino', 1.8);
+  else big(job && data.mode === 'proyekto' ? job.name : MODES[data.mode].name, job && data.mode === 'proyekto' ? describe(job).goal : { deadline: '40 hanay, bilisan!', bagyo: 'Tumataas ang baha!', karera: 'Dalawang minuto. Kita, kita, kita!', daily: `Daily ${dateKey()} · pareho para sa lahat` }[data.mode] || 'Buuin ang bahay!', 1.6);
+  if (match) hint('versus', 'Ang mga sako sa tabi ng well: putik na paparating. Mag-clear para harangin!');
   hint('move', touch ? 'I-tap para iikot, i-drag pakaliwa o pakanan, i-flick pababa para ibagsak. May mga button din sa ibaba.' : '← → galaw · ↑ o X ikot · Z pabalik · ↓ dahan-dahan · Space bagsak · C o Shift imbak · may controller din');
 }
 
@@ -126,12 +183,15 @@ function finish(done) {
     const fresh = newMedals(r, { medals: data.medals, stats: data.stats, xp: data.xp, brgyStars: [0, 1, 2].map((b) => brgyStars(data.stars, b)) });
     data.medals.push(...fresh);
     persist();
+    keepReplay(g, isBest);
+    $('watch').hidden = !rec;
+    $('watch').onclick = () => { if (replays.last) watch(replays.last.code); };
     $('results-stars').hidden = g.mode !== 'proyekto';
     $('results-stars').innerHTML = [1, 2, 3].map((k) => `<span class="${k <= stars ? '' : 'off'}">★</span>`).join('');
     $('results-xp').innerHTML = `+${gain} XP · ${after.name}${after.next ? ` · ${after.need} pa para sa ${after.next}` : ''}<i style="--p:${Math.round(after.progress * 100)}%"></i>`;
     $('results-medals').innerHTML = fresh.map((id) => { const m = MEDALS.find((x) => x.id === id); return `<div class="medal got fresh"><b>★</b>${m.name}</div>`; }).join('');
     const nextJob = g.mode === 'proyekto' && stars > 0 ? CONTRACTS[CONTRACTS.findIndex((c) => c.id === g.contract.id) + 1] : null;
-    $('next-job').hidden = !(nextJob && unlocked(data.stars, nextJob.id));
+    $('next-job').hidden = !(nextJob && unlocked(data.stars, nextJob.id)); $('next-job').textContent = 'Susunod na Kontrata';
     $('next-job').onclick = () => openBrief(nextJob);
     $('share').hidden = g.mode !== 'daily';
     $('share').onclick = () => { const txt = shareText(dateKey(), r); try { if (navigator.share) navigator.share({ text: txt }).catch(() => {}); else navigator.clipboard.writeText(txt).then(() => toast('Nakopya! Copied to the clipboard.', 2000)); } catch { /* nothing to share with */ } };
@@ -153,6 +213,151 @@ function finish(done) {
       clearTimeout(rankT); rankT = setTimeout(() => { if (!$('rankup').hidden) show('results'); }, 4500);
     } else show('results');
   }, done ? 1800 : 1600);
+}
+
+// ---------- Laban: the end of a match ----------
+function finishVersus(winner) {
+  const m = match, g = m.a;
+  setTimeout(() => {
+    if (match !== m) return;
+    mode = 'results';
+    const win = winner === 'a', secs = Math.max(1, m.tick / 60);
+    const r = { mode: 'versus', done: win, ticks: g.elapsed, score: g.score, lines: g.lines, level: g.level, pieces: g.pieces, bayanihan: g.stats.bayanihan, tspins: g.stats.tspins, tspinTriple: g.stats.tspinTriple || 0, maxCombo: g.stats.maxCombo, perfect: g.stats.perfect, tools: 0 };
+    const ladderI = LADDER.findIndex((x) => x.id === m.rival);
+    if (win) { data.vs.wins++; if (ladderI >= 0 && !data.vs.beaten.includes(m.rival)) data.vs.beaten.push(m.rival); }
+    const before = rankOf(data.xp), gain = xpFor(r) + (win ? 150 + Math.max(0, ladderI) * 50 : 0);
+    data.xp += gain; data.stats = addStats(data.stats, r);
+    const after = rankOf(data.xp);
+    const fresh = newMedals(r, { medals: data.medals, stats: data.stats, xp: data.xp, brgyStars: [0, 1, 2].map((b) => brgyStars(data.stars, b)) });
+    data.medals.push(...fresh);
+    persist();
+    keepReplay(g, false);
+    $('watch').hidden = false; $('watch').onclick = () => { if (replays.last) watch(replays.last.code); };
+    $('results-stars').hidden = true; $('share').hidden = true;
+    $('results-title').textContent = winner === 'draw' ? 'Tabla!' : win ? 'Panalo!' : 'Talo…';
+    $('results-score').textContent = `${m.sent[0]} – ${m.sent[1]}`;
+    $('results-best').textContent = win ? `Tinalo mo si ${m.prof.name}!` : `Natalo ka ni ${m.prof.name}.`;
+    $('results-best').className = win ? 'new' : 'muted';
+    const stat = (label, v) => `<div><span>${label}</span><b>${v}</b></div>`;
+    $('results-stats').innerHTML = stat('Ipinadala', `${m.sent[0]} putik`) + stat('Natanggap', `${m.got[0]} putik`) + stat('Hanay', g.lines) + stat('Piraso/seg', (g.pieces / secs).toFixed(2)) + stat('T-spin', g.stats.tspins) + stat('Oras', clock(m.tick));
+    $('results-xp').innerHTML = `+${gain} XP · ${after.name}${after.next ? ` · ${after.need} pa para sa ${after.next}` : ''}<i style="--p:${Math.round(after.progress * 100)}%"></i>`;
+    $('results-medals').innerHTML = fresh.map((id) => { const md = MEDALS.find((x) => x.id === id); return `<div class="medal got fresh"><b>★</b>${md.name}</div>`; }).join('');
+    const nxt = win && ladderI >= 0 ? LADDER[ladderI + 1] : null;
+    $('next-job').hidden = !nxt; $('next-job').textContent = nxt ? `Susunod: ${nxt.name}` : '';
+    $('next-job').onclick = () => openRival(nxt.id);
+    $('results-tip').textContent = win ? `"${pick((m.prof.says || GENERIC).lose)}" — ${m.prof.name}` : `"${pick((m.prof.says || GENERIC).win)}" — ${m.prof.name}`;
+    rankUp = after.index > before.index ? after : null;
+    if (rankUp) { $('rankup-name').textContent = rankUp.name; $('rankup-note').textContent = 'Bagong ranggo!'; show('rankup'); clearTimeout(rankT); rankT = setTimeout(() => { if (!$('rankup').hidden) show('results'); }, 4500); }
+    else show('results');
+  }, 1700);
+}
+
+// ---------- replays: kept on the device, best Deadline, Karera and Daily, and the last game ----------
+const RKEY = 'hollowblocks.replays';
+let replays = { best: {}, last: null };
+try { if (!TEST) { const r = JSON.parse(localStorage.getItem(RKEY)); if (r && typeof r === 'object') replays = { best: r.best || {}, last: r.last || null }; } } catch { /* none kept */ }
+const saveReplays = () => { if (TEST) return; try { localStorage.setItem(RKEY, JSON.stringify(replays)); } catch { /* full: the newest wins next time */ } };
+function keepReplay(g, isBest) {
+  const r0 = rec;
+  if (!r0) return;
+  const meta = { mode: r0.head.vs ? 'versus' : g.mode, diff: r0.head.diff || 'katamtaman', score: g.score, lines: g.lines, ticks: g.elapsed, done: g.phase === 'done', date: dateKey(), rival: r0.head.vs || null, job: r0.head.job || null };
+  encode(r0).then((code) => {
+    meta.code = code; replays.last = meta;
+    if (isBest && (g.mode === 'deadline' || g.mode === 'karera')) replays.best[`${g.mode}.${meta.diff}`] = meta;
+    if (g.mode === 'daily') { const d = replays.best.daily; if (!d || d.date !== meta.date || g.score > d.score) replays.best.daily = meta; }
+    saveReplays();
+  }).catch(() => { /* no compression here: not kept */ });
+}
+// Habulin ang multo: your best run plays alongside, tick for tick
+function loadGhost(g, k) {
+  const b = replays.best[k];
+  if (!b) return;
+  decode(b.code).then((r) => { if (game !== g) return; const end = runToEnd(r); ghost = { pb: startPlayback(r), g, final: { lines: end.lines, score: end.score, ticks: end.elapsed } }; }).catch(() => { ghost = null; });
+}
+function ghostHud() {
+  const el = $('ghostbar');
+  if (!ghost || ghost.g !== game || !view && !TEST) { el.hidden = true; return; }
+  while (ghost.pb.i < game.tick && playTick(ghost.pb));
+  const gg = ghost.pb.g, dl = game.mode === 'deadline';
+  const you = dl ? game.lines / 40 : game.score / Math.max(1, ghost.final.score, game.score);
+  const them = dl ? Math.min(gg.lines, 40) / 40 : gg.score / Math.max(1, ghost.final.score, game.score);
+  el.hidden = false;
+  el.querySelector('.you').style.setProperty('--p', `${(Math.min(1, you) * 100).toFixed(1)}%`);
+  el.querySelector('.fill').style.setProperty('--p', `${(Math.min(1, you) * 100).toFixed(1)}%`);
+  el.querySelector('.gh').style.setProperty('--p', `${(Math.min(1, them) * 100).toFixed(1)}%`);
+  const d = dl ? game.lines - Math.min(40, gg.lines) : game.score - gg.score, b = el.querySelector('b');
+  b.textContent = dl ? `${d > 0 ? '+' : ''}${d} hanay` : `${d >= 0 ? '+' : '−'}${peso(Math.abs(d))}`;
+  b.className = d > 0 ? 'ahead' : d < 0 ? 'behind' : '';
+}
+
+// ---------- the finesse readout, and the lessons ----------
+function showFinesse(f) {
+  if (!f || f.min === null) return;
+  const el = $('finesse');
+  el.className = f.waste ? 'bad' : 'ok';
+  el.innerHTML = `Finesse <b>${f.used}</b> pindot · pinakakaunti <b>${f.min}</b> · <em>${f.waste ? `+${f.waste} sayang` : 'walang sayang'}</em>${coach && coach.pieces > 1 ? ` · kabuuan ${coach.waste}` : ''}`;
+  el.hidden = false; void el.offsetWidth; el.classList.add('pop');
+}
+function lessonHint() {
+  if (!lesson || !game || !game.cur || !lesson.target) return null;
+  const t = lesson.target[game.pieces];
+  return t && t.type === game.cur.type ? cellsOf(t) : null;
+}
+function verdict(v) {
+  if (!v || lessonEnd) return;
+  const l = lesson, g = game;
+  if (v === 'pass') {
+    lessonEnd = 1;
+    big('PASADO!', l.name, 1.8); A.event({ type: 'done' }); if (view) view.celebrate();
+    if (!data.lessons.includes(l.id)) { data.lessons.push(l.id); data.xp += 100; }
+    persist();
+    setTimeout(() => {
+      if (game !== g) return;
+      mode = 'lessondone';
+      const i = LESSONS.indexOf(l), nxt = LESSONS[i + 1];
+      $('ld-title').textContent = 'Pasado!';
+      $('ld-text').innerHTML = `<b>Kapatas:</b> "${{ tss: 'Ayan! Iyan ang T-spin. Ngayon, dalawang hanay naman.', tsd: 'T-spin double: apat na putik sa kalaban. Pang-engineer!', tst: 'Tatlong hanay sa isang ikot! Handa ka na sa Tatlong T-spin.', combo: 'Tuloy-tuloy! Ganyan ang Sunod-sunod.', finesse: 'Walang sayang na galaw. Tunay na mason!' }[l.id]}"${l.contracts.length ? `<br><small class="muted">Subukan na ang kontrata: ${l.contracts.map((c) => contractById(c).name).join(', ')}.</small>` : ''}`;
+      $('ld-next').hidden = !nxt; $('ld-next').onclick = () => openLesson(nxt);
+      show('lessondone');
+    }, 1900);
+  } else {
+    lessonEnd = 1;
+    big('ULIT!', l.id === 'finesse' ? 'May sayang na pindot o maling puwesto' : l.id === 'combo' ? 'Naputol ang combo' : 'Hindi T-spin: iikot bago dumikit', 1.6);
+    say('retry', true);
+    setTimeout(() => { if (game === g && mode === 'play') retryLesson(); }, 1700);
+  }
+}
+function retryLesson() { if (!lesson) return; data.mode = 'training'; start(); }
+
+// ---------- the rival's trash talk ----------
+const GENERIC = { start: ['Tara, laban!', 'Handa ka na ba?'], send: ['Ayan ang putik mo!', 'Tanggapin mo yan!'], hurt: ['Aray!', 'Ang galing mo, ah!'], danger: ['Patay, ang taas na!'], win: ['Sa susunod na lang!'], lose: ['Ang galing mo!'] };
+let rbubbleT = 0, rsayCool = 0;
+function rivalSays(kind, force = false) {
+  if (!match) return;
+  if (!force && rsayCool > 0) return;
+  const lines = (match.prof.says || GENERIC)[kind] || GENERIC[kind];
+  const el = $('rbubble'); el.textContent = pick(lines); rbubbleT = 2.6; rsayCool = 3.5;
+  el.style.setProperty('--rc', match.prof.color || '#e8402a');
+  el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+  if (!view) toast(`${match.prof.name}: "${el.textContent}"`, 2000);
+}
+function onMatch(out) {
+  for (const e of out.a) onEvent(e);
+  for (const e of out.b) { if (view) view.rivalEvent(e, match.b); if (e.type === 'lines' && e.n === 4) A.event({ type: 'hold' }); }
+  for (const e of out.x) {
+    if (e.type === 'attack') {
+      if (view) view.attack(e.from, e.sent, e.cancelled);
+      if (e.from === 1 && e.sent >= 2) { rivalSays('send'); A.event({ type: 'rise' }); }
+      if (e.from === 0 && e.n >= 3) rivalSays('hurt');
+      if (e.from === 0 && e.sent > 0) buzz(20);
+    } else if (e.type === 'ko') {
+      rivalSays(e.winner === 'b' ? 'win' : 'lose', true);
+      if (e.winner === 'a') { big('PANALO!', `Gumuho ang kay ${match.prof.name}`, 2); A.event({ type: 'done' }); }
+      finishVersus(e.winner);
+    }
+  }
+  let top = 99; for (let i = 0; i < match.b.board.length; i++) if (match.b.board[i]) { top = Math.floor(i / 10); break; }
+  if (top < 6 && match.phase === 'play') rivalSays('danger');
 }
 
 // ---------- hints, callouts, the foreman's bubble ----------
@@ -203,21 +408,19 @@ function onEvent(e) {
     case 'tool': buzz(25); say('tool', true); break;
     case 'lindol': buzz([60, 40, 60]); say('lindol', true); break;
     case 'perfect': big('MALINIS!', 'Perfect clear', 1.6); break;
-    case 'gameover': say('over', true); finish(false); break;
-    case 'done': big('TAPOS!', 'Deadline met!', 2); say('done', true); finish(true); break;
+    case 'gameover': say('over', true); if (lesson) verdict('fail'); else if (!match) finish(false); break;
+    case 'done': if (lesson) break; big('TAPOS!', 'Deadline met!', 2); say('done', true); finish(true); break;
     default: break;
   }
 }
 
 function pause() { if (mode === 'play') { mode = 'pause'; show('pause'); } }
 function resume() { if (mode === 'pause') { mode = 'play'; clearInput(); show(null); } }
-function toMenu() { mode = 'title'; game = null; job = null; labels(); show('title'); }
+function toMenu() { mode = 'title'; game = null; job = null; match = null; lesson = null; viewer = null; ghost = null; if (view) view.setVersus(false); labels(); show('title'); }
 
 // ---------- input ----------
-const KEYS = {
-  ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right', ArrowDown: 'down', s: 'down',
-  ' ': 'hard', ArrowUp: 'cw', x: 'cw', w: 'cw', z: 'ccw', q: 'ccw', c: 'hold', Shift: 'hold', e: 'tool',
-};
+let KEYS = {};
+function keymap() { KEYS = {}; for (const [a, ks] of Object.entries(data.keys)) for (const k of ks) if (!(k in KEYS)) KEYS[k] = a; }
 const HELD = new Set(['left', 'right', 'down']);
 const held = new Set();
 let pressed = [];
@@ -225,8 +428,11 @@ function clearInput() { held.clear(); pressed = []; }
 const playing = () => mode === 'play' && game;
 document.addEventListener('keydown', (e) => {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (capture && capture.kind === 'key') { e.preventDefault(); captured(k); return; }
   const act = KEYS[k];
-  if (act && playing()) {
+  if (act === 'pause' && (mode === 'play' || mode === 'pause')) { e.preventDefault(); if (mode === 'play') pause(); else resume(); return; }
+  if (k === 'r' && mode === 'play' && lesson && act !== 'left' && act !== 'right') { retryLesson(); return; }
+  if (act && act !== 'pause' && playing()) {
     e.preventDefault();
     if (!e.repeat && act !== 'down') pressed.push(act);
     if (HELD.has(act)) held.add(act);
@@ -234,7 +440,8 @@ document.addEventListener('keydown', (e) => {
   }
   const onButton = document.activeElement?.tagName === 'BUTTON';
   if ((k === ' ' || k === 'Enter') && !onButton && mode === 'title') { e.preventDefault(); start(); return; }
-  if (k === 'p' || k === 'Escape') { if (mode === 'play') pause(); else if (mode === 'pause') resume(); else if (mode === 'settings') $('settings-ok').click(); }
+  if (k === 'p' || k === 'Escape') { if (mode === 'play') pause(); else if (mode === 'pause') resume(); else if (mode === 'settings') $('settings-ok').click(); else if (mode === 'keys') $('keys-ok').click(); else if (mode === 'replay') closeViewer(); }
+  if (mode === 'replay' && k === ' ') { e.preventDefault(); toggleViewer(); }
   if (k === 'm') toggleSound();
 });
 document.addEventListener('keyup', (e) => { const act = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key]; if (act && HELD.has(act)) held.delete(act); });
@@ -285,22 +492,26 @@ function readPad(dt) {
   const b = (i) => !!(p.buttons[i] && p.buttons[i].pressed), ax = p.axes || [];
   const edge = (name, on) => { const was = padWas[name]; padWas[name] = on; return on && !was; };
   const left = b(14) || (ax[0] || 0) < -0.5, right = b(15) || (ax[0] || 0) > 0.5, down = b(13) || (ax[1] || 0) > 0.6, up = b(12) || (ax[1] || 0) < -0.7;
+  if (capture && capture.kind === 'pad') {
+    // the remap screen is waiting for a button: the first one newly pressed
+    for (let i = 0; i < Math.min(16, p.buttons.length); i++) if (edge(`cap${i}`, b(i)) && capture.armed) { captured(i); return; }
+    capture.armed = true; return;
+  }
   if (playing()) {
     const dirs = new Set([left && 'left', right && 'right', down && 'down'].filter(Boolean));
     for (const d of dirs) { if (!padHeldDirs.has(d) && d !== 'down') pressed.push(d); held.add(d); }
     for (const d of padHeldDirs) if (!dirs.has(d)) held.delete(d);
     padHeldDirs = dirs;
-    if (edge('up', up)) pressed.push('hard');
-    if (edge('a', b(0))) pressed.push('cw');
-    if (edge('bb', b(1))) pressed.push('ccw');
-    if (edge('tool', b(2))) pressed.push('tool');
-    if (edge('hold', b(3) || b(4) || b(5) || b(6) || b(7))) pressed.push('hold');
-    if (edge('start', b(9))) pause();
+    // the stick's up is a hard drop when the d-pad's up is (the default)
+    for (const [act, list] of Object.entries(data.pad)) {
+      const on = list.some((i) => b(i)) || (act === 'hard' && list.includes(12) && (ax[1] || 0) < -0.7);
+      if (edge(`p:${act}`, on)) { if (act === 'pause') pause(); else pressed.push(act); }
+    }
     return;
   }
   for (const d of padHeldDirs) held.delete(d); padHeldDirs = new Set();
   const screen = SCREENS.find((id) => !$(id).hidden);
-  if (!screen) { edge('start', b(9)); return; }
+  if (!screen) { if (edge('start', b(9)) && mode === 'replay') toggleViewer(); if (edge('bb', b(1)) && mode === 'replay') closeViewer(); return; }
   const move = (dx, dy) => {
     const btns = [...$(screen).querySelectorAll('button, input')].filter((x) => x.offsetParent);
     const cur = document.activeElement && btns.includes(document.activeElement) ? document.activeElement : null;
@@ -313,7 +524,7 @@ function readPad(dt) {
   };
   if (edge('mL', left)) move(-1, 0); if (edge('mR', right)) move(1, 0); if (edge('mU', up)) move(0, -1); if (edge('mD', down)) move(0, 1);
   if (edge('a', b(0))) { A.start(); document.activeElement?.click(); }
-  if (edge('bb', b(1))) { if (screen === 'pause') resume(); else if (screen === 'settings') $('settings-ok').click(); else if (screen === 'results' || screen === 'map' || screen === 'stats' || screen === 'how') toMenu(); else if (screen === 'brief') openMap(); }
+  if (edge('bb', b(1))) { if (screen === 'pause') resume(); else if (screen === 'settings') $('settings-ok').click(); else if (['results', 'map', 'stats', 'how', 'vs', 'lessons', 'replays'].includes(screen)) toMenu(); else if (screen === 'brief') openMap(); else if (screen === 'rival') openVs(); else if (screen === 'lesson' || screen === 'lessondone') openLessons(); else if (screen === 'keys') $('keys-ok').click(); }
   if (edge('start', b(9))) { if (screen === 'pause') resume(); else if (screen === 'title') start(); }
 }
 
@@ -329,17 +540,19 @@ function labels() {
     karera: 'Karera: dalawang minuto, pinakamataas na kita. May gamit!',
     daily: `Daily ${dateKey()}: parehong mga piraso para sa lahat ngayong araw. Dalawang minuto.${data.daily[dateKey()] ? ` Best mo ngayon: ${peso(data.daily[dateKey()].score)}` : ''}`,
     proyekto: `Proyekto: 15 kontrata sa 3 barangay. ${CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0)}/45 bituin.`,
+    versus: `Laban: ang well mo laban sa kalaban, magpadala ng putik. Liga ng Barangay: ${data.vs.beaten.length}/${LADDER.length} natalo.`,
+    training: `Pagsasanay: ${LESSONS.length} aralin ni Kapatas (T-spin, combo, finesse). ${data.lessons.length}/${LESSONS.length} pasado.`,
   }[data.mode];
   const rk = rankOf(data.xp);
   $('title-rank').textContent = `Ranggo: ${rk.name} · ${data.xp.toLocaleString('en-US')} XP${rk.next ? ` (${rk.need.toLocaleString('en-US')} pa para sa ${rk.next})` : ''} · ${data.medals.length}/${MEDALS.length} medalya`;
-  for (const b of document.querySelectorAll('[data-diff]')) b.disabled = data.mode === 'daily' || data.mode === 'proyekto';
+  for (const b of document.querySelectorAll('[data-diff]')) b.disabled = ['daily', 'proyekto', 'versus', 'training'].includes(data.mode);
   $('diff-note').textContent = { madali: 'Madali: mas mabagal ang bagsak at mas matagal bago dumikit.', katamtaman: 'Katamtaman: ang klasiko.', mahirap: 'Mahirap: magsisimula sa ika-6 na palapag.' }[data.difficulty];
   const b = data.best[bestKey()];
-  $('title-best').textContent = data.mode === 'proyekto' || data.mode === 'daily' ? '' : b ? `Best (${MODES[data.mode].name}, ${DIFFICULTY[data.difficulty].name}): ${data.mode === 'deadline' ? clock(b) : peso(b)}` : '';
+  $('title-best').textContent = ['proyekto', 'daily', 'versus', 'training'].includes(data.mode) ? '' : b ? `Best (${MODES[data.mode].name}, ${DIFFICULTY[data.difficulty].name}): ${data.mode === 'deadline' ? clock(b) : peso(b)}` : '';
 }
 for (const b of document.querySelectorAll('.sound')) b.onclick = toggleSound;
 for (const b of document.querySelectorAll('[data-diff]')) b.onclick = () => { data.difficulty = b.dataset.diff; persist(); labels(); };
-for (const b of document.querySelectorAll('[data-mode]')) b.onclick = () => { data.mode = b.dataset.mode; job = null; persist(); labels(); if (data.mode === 'proyekto') openMap(); };
+for (const b of document.querySelectorAll('[data-mode]')) b.onclick = () => { data.mode = b.dataset.mode; job = null; vsPick = null; lesson = null; persist(); labels(); if (data.mode === 'proyekto') openMap(); else if (data.mode === 'versus') openVs(); else if (data.mode === 'training') openLessons(); };
 
 // ---------- settings ----------
 let settingsFrom = 'title';
@@ -349,6 +562,10 @@ function openSettings(from) {
   const val = (key) => (key === 'gfx' ? data.gfx : key === 'calm' ? data.calm : o[key]);
   const seg = (key, list) => `<div class="modes">${list.map(([v, label]) => `<button type="button" data-k="${key}" data-v="${v}" aria-pressed="${String(val(key)) === String(v)}">${label}</button>`).join('')}</div>`;
   const slider = (key, label) => `<label class="slide">${label} <input type="range" min="0" max="1" step="0.05" value="${o[key]}" data-k="${key}"></label>`;
+  const R = data.rules, rv = (key) => R[key];
+  const rseg = (key, list) => `<div class="modes">${list.map(([v, label]) => `<button type="button" data-k="r:${key}" data-v="${v}" aria-pressed="${String(rv(key)) === String(v)}">${label}</button>`).join('')}</div>`;
+  const dasTxt = () => (R.das === null ? `Auto (${DIFFICULTY[data.difficulty].das})` : `${R.das} · ${Math.round(R.das * 16.67)} ms`);
+  const arrTxt = () => (R.arr === null ? `Auto (${DIFFICULTY[data.difficulty].arr})` : R.arr === 0 ? '0 · agad' : `${R.arr} · ${Math.round(R.arr * 16.67)} ms`);
   $('settings-body').innerHTML = `
     <div class="grp"><h3>Laro · Game</h3>
     <p class="muted">Anino ng piraso · Ghost piece</p>${seg('ghost', [[true, 'Oo · On'], [false, 'Wala · Off']])}
@@ -358,15 +575,32 @@ function openSettings(from) {
     <p class="muted">Yanig ng camera · Camera shake</p>${seg('calm', [[false, 'Buo · Full'], [true, 'Kalmado · Reduced']])}
     </div><div class="grp"><h3>Tunog at itsura · Sound and look</h3>
     ${slider('music', 'Musika · Music')}${slider('sfx', 'Tunog · Effects')}
-    <p class="muted">Graphics</p>${seg('gfx', [['auto', 'Auto'], [2, 'Mataas'], [1, 'Katamtaman'], [0, 'Mababa']])}</div>`;
+    <p class="muted">Graphics</p>${seg('gfx', [['auto', 'Auto'], [2, 'Mataas'], [1, 'Katamtaman'], [0, 'Mababa']])}</div>
+    <div class="grp"><h3>Kontrol · Controls</h3>
+    <p class="muted">Susunod na piraso · Next queue</p>${rseg('next', [1, 2, 3, 4, 5, 6].map((n) => [n, n]))}
+    <label class="slide">DAS <input type="range" min="0" max="20" step="1" value="${R.das ?? 0}" data-k="r:das"><span class="val" id="v-das">${dasTxt()}</span></label>
+    <label class="slide">ARR <input type="range" min="-1" max="6" step="1" value="${R.arr ?? -1}" data-k="r:arr"><span class="val" id="v-arr">${arrTxt()}</span></label>
+    <p class="muted">Bilis ng dahan · Soft drop</p>${rseg('soft', [[null, 'Normal'], [1, '×2'], [2, '×4'], [20, 'Agad']])}
+    <p class="muted">Ikot 180° · Half turn (${keyName(data.keys.r180[0] || '-')})</p>${rseg('rot180', [[false, 'Wala · Off'], [true, 'Oo · On']])}
+    <p class="muted">Imbak · Hold</p>${rseg('hold', [[true, 'Oo · On'], [false, 'Wala · Off']])}
+    <p class="muted">Finesse coach (sa lahat ng mode)</p>${rseg('coach', [[false, 'Wala · Off'], [true, 'Oo · On']])}
+    <p class="muted">Habulin ang multo · Ghost race</p>${rseg('ghost', [[true, 'Oo · On'], [false, 'Wala · Off']])}
+    <p class="muted">Sa susunod na laro ang bago. Applies next game.</p>
+    <div class="modes"><button type="button" id="open-keys">${icon('keyb', 20)} ${icon('pad', 20)} Mga pindutan · Remap</button></div></div>`;
   for (const b of $('settings-body').querySelectorAll('button')) b.onclick = () => {
     const k = b.dataset.k, raw = b.dataset.v, v = raw === 'true' ? true : raw === 'false' ? false : isNaN(+raw) ? raw : +raw;
+    if (!k) return;
+    if (k.startsWith('r:')) { data.rules[k.slice(2)] = raw === 'null' ? null : v; persist(); openSettings(settingsFrom); return; }
     if (k === 'gfx') { data.gfx = v; if (view) { view.post.setAuto(v === 'auto'); view.post.setLevel(v === 'auto' ? (touch ? 1 : 2) : v); applyGfx(); } }
     else if (k === 'calm') data.calm = v;
     else { o[k] = v; if (k === 'angle' && view) view.setAngled(v); }
     persist(); openSettings(settingsFrom);
   };
-  for (const r of $('settings-body').querySelectorAll('input[type=range]')) r.oninput = () => { o[r.dataset.k] = +r.value; A.start(); A.setMix(o); if (r.dataset.k === 'sfx') A.event({ type: 'lock', piece: 'O', cells: [] }); persist(); };
+  $('open-keys').onclick = openKeys;
+  for (const r of $('settings-body').querySelectorAll('input[type=range]')) r.oninput = () => {
+    if (r.dataset.k === 'r:das') { data.rules.das = +r.value ? +r.value : null; $('v-das').textContent = dasTxt(); persist(); return; }
+    if (r.dataset.k === 'r:arr') { data.rules.arr = +r.value < 0 ? null : +r.value; $('v-arr').textContent = arrTxt(); persist(); return; }
+    o[r.dataset.k] = +r.value; A.start(); A.setMix(o); if (r.dataset.k === 'sfx') A.event({ type: 'lock', piece: 'O', cells: [] }); persist(); };
   show('settings');
   if (again && $('settings-body').querySelector(again)) $('settings-body').querySelector(again).focus({ preventScroll: true });
 }
@@ -389,10 +623,141 @@ function openBrief(c) {
   $('brief-brgy').textContent = `Brgy. ${BARANGAYS[c.brgy]} · Kontrata ${CONTRACTS.filter((x) => x.brgy === c.brgy).indexOf(c) + 1}/5`;
   $('brief-name').textContent = c.name; $('brief-text').textContent = c.brief; $('brief-goal').textContent = d.goal; $('brief-twist').textContent = d.twist || 'Walang dagdag na pahirap.'; $('brief-par').textContent = d.par;
   $('brief-stars').innerHTML = [1, 2, 3].map((k) => `<span class="${k <= st ? '' : 'off'}">★</span>`).join('');
+  const L = lessonFor(c.id);
+  $('brief-lesson').hidden = !L;
+  if (L) { $('brief-lesson').innerHTML = `${icon('blueprint', 20)} Aralin: ${L.name}${data.lessons.includes(L.id) ? ` ${icon('check', 18)}` : ''}`; $('brief-lesson').onclick = () => openLesson(L); }
   show('brief');
 }
 $('brief-go').onclick = start;
 $('brief-back').onclick = openMap;
+// ---------- Laban: quick matches and the Liga ng Barangay ----------
+function openVs() {
+  mode = 'vs'; data.mode = 'versus';
+  $('vs-quick').innerHTML = Object.values(LEVELS).map((l) => `<button type="button" data-lv="${l.id}">${l.name}</button>`).join('');
+  $('vs-note').textContent = `${data.vs.beaten.length}/${LADDER.length} natalo · ${data.vs.wins} panalo lahat`;
+  $('vs-ladder').innerHTML = LADDER.map((r, i) => { const open = ladderOpen(data.vs.beaten, r.id), won = data.vs.beaten.includes(r.id); return `<button type="button" class="rcard" data-rv="${r.id}" style="--rc:${r.color}" ${open ? '' : 'disabled'}><span class="num">${i + 1}</span>${won ? `<span class="won">${icon('check', 22)}</span>` : open ? '' : `<span class="won">${icon('lock', 20)}</span>`}${portrait(r.color, 58)}<b>${r.name}</b><small>Brgy. ${r.brgy}</small><em>${r.tag}</em></button>`; }).join('');
+  for (const b of $('vs-quick').querySelectorAll('[data-lv]')) b.onclick = () => openRival(b.dataset.lv);
+  for (const b of $('vs-ladder').querySelectorAll('[data-rv]')) b.onclick = () => openRival(b.dataset.rv);
+  show('vs');
+}
+function openRival(id) {
+  const r = rivalById(id), lad = LADDER.find((x) => x.id === id);
+  vsPick = id; data.mode = 'versus'; mode = 'rival';
+  const bars = (v, max) => Array.from({ length: 5 }, (_, i) => `<i class="${i < Math.round((v / max) * 5) ? 'on' : ''}"></i>`).join('');
+  $('rival-card').style.setProperty('--rc', r.color || '#ffd23f');
+  $('rival-card').innerHTML = `${portrait(r.color || '#ffd23f', 92)}<small>${lad ? `Liga ng Barangay · Brgy. ${lad.brgy}` : 'Mabilisang laban'}</small><h3>${r.name}</h3><small>${lad ? lad.tag : r.style === 'tetris' ? 'Bayanihan' : r.spins ? 'Lahat' : 'Tagasalansan'}</small>
+    <p>${lad ? lad.blurb : { baguhan: 'Bagong peon: mabagal at madalas magkamali. Para sa unang laban.', bihasa: 'Sanay na mason: nag-iipon ng kawayan para sa Bayanihan.', kapatas: 'Si Kapatas mismo: mabilis, may T-spin, halos walang mali.' }[id]}</p>
+    <p class="meter" style="--rc:${r.color || '#ffd23f'}">Bilis&nbsp;${bars(r.pps, 2.1)}&nbsp;&nbsp;Husay&nbsp;${bars(1 - r.mistake, 1)}</p>
+    ${lad ? `<p><b style="color:${r.color}">${r.name}:</b> "${lad.says.start[0]}"</p>` : ''}`;
+  show('rival');
+}
+$('rival-go').onclick = () => { data.mode = 'versus'; start(); };
+$('rival-back').onclick = openVs;
+
+// ---------- Pagsasanay: the lessons ----------
+function openLessons() {
+  mode = 'lessons'; data.mode = 'training'; lesson = null;
+  $('lessons-body').innerHTML = LESSONS.map((l) => `<button type="button" class="lcard" data-ls="${l.id}">${data.lessons.includes(l.id) ? `<span class="done">${icon('check', 22)}</span>` : ''}${icon('blueprint', 44)}<b>${l.name}</b><small>${l.tip}</small>${l.contracts.length ? `<i>Para sa ${[...new Set(l.contracts)].map((c) => contractById(c).name).join(', ')}</i>` : '<i>Para sa lahat</i>'}</button>`).join('');
+  for (const b of $('lessons-body').querySelectorAll('[data-ls]')) b.onclick = () => openLesson(lessonById(b.dataset.ls));
+  show('lessons');
+}
+function openLesson(l) {
+  lesson = l; data.mode = 'training'; mode = 'lesson';
+  $('lesson-num').textContent = `Aralin ${LESSONS.indexOf(l) + 1}/${LESSONS.length}${data.lessons.includes(l.id) ? ' · Pasado na' : ''}`;
+  $('lesson-name').textContent = l.name; $('lesson-text').textContent = l.brief; $('lesson-keys').textContent = l.tip;
+  $('lesson-for').textContent = l.contracts.length ? `Kailangan sa kontrata: ${[...new Set(l.contracts)].map((c) => contractById(c).name).join(', ')}.` : 'Ang gintong anino ang tamang puwesto; ipapakita ng coach ang sayang na pindot.';
+  show('lesson');
+}
+$('lesson-go').onclick = () => { data.mode = 'training'; start(); };
+$('lesson-back').onclick = openLessons;
+$('ld-again').onclick = retryLesson;
+$('ld-list').onclick = openLessons;
+$('lretry').onclick = retryLesson;
+
+// ---------- replays: the list, the viewer, sharing ----------
+const MODE_LABEL = { deadline: 'Deadline', karera: 'Karera', daily: 'Daily', versus: 'Laban', bahay: 'Bahay', bagyo: 'Bagyo', proyekto: 'Proyekto' };
+const resultOf = (m) => (m.mode === 'deadline' ? (m.done ? clock(m.ticks) : `${m.lines}/40`) : m.mode === 'versus' ? `vs ${rivalById(m.rival)?.name || ''}` : peso(m.score));
+function openReplays() {
+  mode = 'replays';
+  const rows = [];
+  for (const [k, m] of Object.entries(replays.best)) rows.push([k === 'daily' ? `Best Daily ${m.date}` : `Best ${MODE_LABEL[m.mode]} · ${DIFFICULTY[m.diff]?.name || ''}`, m]);
+  if (replays.last) rows.push(['Huling laro · Last game', replays.last]);
+  $('replays-body').innerHTML = rows.length ? rows.map(([label, m], i) => `<div class="card rrow">${icon(m.mode === 'versus' ? 'vs' : 'replay', 34)}<div><b>${label}</b><small>${MODE_LABEL[m.mode] || m.mode} · ${resultOf(m)} · ${m.lines} hanay · ${m.date}</small></div><button type="button" class="primary" data-w="${i}">${icon('play', 16)} Panoorin</button><button type="button" data-sh="${i}">${icon('share', 16)} Link</button></div>`).join('') : '<p class="note card">Wala pang replay. Maglaro ng Deadline, Karera o Daily: ang pinakamagandang takbo mo ay itatabi rito.</p>';
+  for (const b of $('replays-body').querySelectorAll('[data-w]')) b.onclick = () => watch(rows[+b.dataset.w][1].code);
+  for (const b of $('replays-body').querySelectorAll('[data-sh]')) b.onclick = () => shareReplay(rows[+b.dataset.sh][1].code);
+  show('replays');
+}
+$('replays-btn').onclick = openReplays;
+function shareReplay(code) {
+  const url = `${location.origin}${location.pathname}#r=${code}`;
+  try { if (navigator.share && touch) navigator.share({ title: 'Hollow Blocks replay', url }).catch(() => {}); else navigator.clipboard.writeText(url).then(() => toast('Nakopya ang link! Replay link copied.', 2200), () => toast(url.slice(0, 80) + '…', 4000)); } catch { /* nothing to share with */ }
+}
+async function watch(code) {
+  let r;
+  try { r = await decode(code); } catch { toast('Sira ang replay link · This replay link is broken.', 3000); return; }
+  const pb = startPlayback(r);
+  viewer = { pb, code, speed: 1, paused: false, acc: 0, ended: false };
+  game = null; match = null; lesson = null; ghost = null;
+  if (view) view.setVersus(!!r.head.vs, r.head.vs ? rivalById(r.head.vs) : null);
+  mode = 'replay'; hudKey = ''; toolsKey = '';
+  show(null); viewerUi();
+}
+const vgame = () => (viewer ? (viewer.pb.rec.head.vs ? viewer.pb.g.a : viewer.pb.g) : null);
+function viewerUi() {
+  if (!viewer) return;
+  $('rb-play').innerHTML = icon(viewer.paused ? 'play' : 'pause', 20);
+  $('rb-share').innerHTML = `${icon('share', 18)} Link`;
+  for (const b of document.querySelectorAll('[data-speed]')) b.setAttribute('aria-pressed', String(+b.dataset.speed === viewer.speed));
+}
+function toggleViewer() {
+  if (!viewer) return;
+  if (viewer.ended) { const code = viewer.code; watch(code); return; }
+  viewer.paused = !viewer.paused; viewerUi();
+}
+function closeViewer() { viewer = null; if (view) view.setVersus(false); location.hash && history.replaceState(null, '', location.pathname + location.search); openReplays(); }
+$('rb-play').onclick = toggleViewer;
+for (const b of document.querySelectorAll('[data-speed]')) b.onclick = () => { if (viewer) { viewer.speed = +b.dataset.speed; viewerUi(); } };
+$('rb-share').onclick = () => { if (viewer) shareReplay(viewer.code); };
+$('rb-close').onclick = closeViewer;
+$('watch').onclick = () => { if (replays.last) watch(replays.last.code); };
+
+// ---------- the controls: keys and controller buttons ----------
+const KEY_ACTS = ['left', 'right', 'down', 'hard', 'cw', 'ccw', 'r180', 'hold', 'tool', 'pause'], PAD_ACTS = ['cw', 'ccw', 'r180', 'hold', 'hard', 'tool', 'pause'];
+function openKeys() { mode = 'keys'; capture = null; drawKeys(); show('keys'); }
+function drawKeys() {
+  const map = data.keys, pm = data.pad;
+  const kRow = (a) => `<tr class="${capture && capture.kind === 'key' && capture.act === a ? 'cap' : ''} ${capture?.kind === 'key' && capture.clash?.other === a ? 'clash' : ''}"><td>${ACT_NAME[a]}</td><td>${map[a].map((k, i) => `<span class="kchip">${keyName(k)}<button type="button" data-rm="${a}:${i}" aria-label="Remove ${keyName(k)}">×</button></span>`).join('') || '<span class="muted">wala</span>'}</td><td><button type="button" class="add" data-cap="${a}">${capture && capture.kind === 'key' && capture.act === a ? 'Pindutin…' : '+ Dagdag'}</button></td></tr>`;
+  const pRow = (a) => `<tr class="${capture && capture.kind === 'pad' && capture.act === a ? 'cap' : ''} ${capture?.kind === 'pad' && capture.clash?.other === a ? 'clash' : ''}"><td>${ACT_NAME[a]}</td><td>${pm[a].map((b) => `<span class="kchip">${PAD_NAME[b] || `#${b}`}</span>`).join('') || '<span class="muted">wala</span>'}</td><td><button type="button" class="add" data-pcap="${a}">${capture && capture.kind === 'pad' && capture.act === a ? 'Pindutin…' : 'Palitan'}</button></td></tr>`;
+  let note = '<p class="capnote muted">Pumili ng aksyon, saka pindutin ang bagong key o button. Esc para kanselahin.</p>';
+  if (capture && capture.clash) note = `<p class="capnote warn">${icon('warn', 20)} Ang <b>${capture.kind === 'key' ? keyName(capture.clash.key) : PAD_NAME[capture.clash.key]}</b> ay gamit na ng <b>${ACT_NAME[capture.clash.other]}</b>. Ilipat dito sa ${ACT_NAME[capture.act]}?<button type="button" id="clash-yes">Ilipat · Move</button><button type="button" id="clash-no">Huwag · Cancel</button></p>`;
+  else if (capture) note = `<p class="capnote">${icon(capture.kind === 'key' ? 'keyb' : 'pad', 20)} Pindutin ang ${capture.kind === 'key' ? 'key' : 'button sa controller'} para sa <b>${ACT_NAME[capture.act]}</b>… (Esc: kanselahin)</p>`;
+  $('keys-body').innerHTML = `<div><p class="h3g">${icon('keyb', 22)} Keyboard</p><table class="kt">${KEY_ACTS.map(kRow).join('')}</table></div><div><p class="h3g">${icon('pad', 22)} Controller</p><table class="kt">${PAD_ACTS.map(pRow).join('')}</table><p class="muted" style="margin-top:6px">Ang d-pad at kaliwang stick: galaw at dahan.</p></div>${note}`;
+  for (const b of $('keys-body').querySelectorAll('[data-cap]')) b.onclick = () => { capture = { kind: 'key', act: b.dataset.cap }; drawKeys(); };
+  for (const b of $('keys-body').querySelectorAll('[data-pcap]')) b.onclick = () => { capture = { kind: 'pad', act: b.dataset.pcap, armed: false }; drawKeys(); };
+  for (const b of $('keys-body').querySelectorAll('[data-rm]')) b.onclick = () => { const [a, i] = b.dataset.rm.split(':'); data.keys[a].splice(+i, 1); keymap(); persist(); drawKeys(); };
+  if ($('clash-yes')) { $('clash-yes').onclick = () => assign(capture.clash.key, true); $('clash-no').onclick = () => { capture = null; drawKeys(); }; }
+}
+// a key or button arrived for the action being changed: warn on a clash, else take it
+function captured(k) {
+  if (!capture) return;
+  if (capture.kind === 'key' && (k === 'Escape')) { capture = null; drawKeys(); return; }
+  const map = capture.kind === 'key' ? data.keys : data.pad;
+  const other = Object.keys(map).find((a) => a !== capture.act && map[a].includes(k));
+  if (other) { capture.clash = { key: k, other }; drawKeys(); return; }
+  assign(k, false);
+}
+function assign(k, move) {
+  const c = capture, map = c.kind === 'key' ? data.keys : data.pad;
+  if (move) for (const a of Object.keys(map)) if (a !== c.act) map[a] = map[a].filter((x) => x !== k);
+  if (c.kind === 'key') { if (!map[c.act].includes(k)) { map[c.act].push(k); if (map[c.act].length > 3) map[c.act].shift(); } }
+  else map[c.act] = [k];
+  capture = null; keymap(); persist(); drawKeys();
+  toast(`${ACT_NAME[c.act]}: ${c.kind === 'key' ? keyName(k) : PAD_NAME[k]}`, 1600);
+}
+$('keys-ok').onclick = () => { capture = null; openSettings(settingsFrom); };
+$('keys-reset').onclick = () => { data.keys = validMap(null, DEF_KEYS, () => true); data.pad = validMap(null, DEF_PAD, () => true); capture = null; keymap(); persist(); drawKeys(); toast('Ibinalik sa default · Controls reset', 1600); };
+keymap();
+
 // ---------- the stats page: rank, totals, medals, the house style ----------
 function openStats() {
   mode = 'stats';
@@ -434,6 +799,27 @@ function hud(g) {
       $('pad-tool').disabled = !g.tools.length; $('pad-tool').innerHTML = g.tools.length ? `${icon(g.tools[0], 30)}<b>${g.tools.length}</b>` : icon('toolbox', 30);
     }
   }
+  const m = match || (viewer && viewer.pb.rec.head.vs ? viewer.pb.g : null);
+  if (m) {
+    // Laban: what you sent, the match, what the rival sent
+    const k = `vs|${m.sent[0]}|${m.sent[1]}|${pendingRows(m.a)}|${pendingRows(m.b)}|${Math.floor(m.tick / 30)}`;
+    if (k === hudKey) return;
+    hudKey = k;
+    $('h-score').querySelector('small').textContent = 'Ipinadala'; $('h-score').querySelector('b').textContent = `${m.sent[0]} putik`;
+    $('h-mode').querySelector('b').textContent = 'LABAN'; $('h-mode').querySelector('em').textContent = `vs ${m.prof.name} · ${clock(m.tick)}${pendingRows(m.a) ? ` · ${pendingRows(m.a)} paparating` : ''}`;
+    $('h-best').querySelector('small').textContent = m.prof.name; $('h-best').querySelector('b').textContent = `${m.sent[1]} putik`;
+    return;
+  }
+  $('h-score').querySelector('small').textContent = 'Kita';
+  if (g.mode === 'training' && lesson) {
+    const k = `tr|${g.pieces}|${g.lines}|${g.stats.maxCombo}|${coach ? coach.waste : 0}`;
+    if (k === hudKey) return;
+    hudKey = k;
+    $('h-score').querySelector('b').textContent = peso(g.score);
+    $('h-mode').querySelector('b').textContent = lesson.name.toUpperCase(); $('h-mode').querySelector('em').textContent = `Pagsasanay · ${lesson.id === 'combo' ? `combo ${Math.max(0, g.stats.maxCombo)}/4` : lesson.id === 'finesse' ? `${Math.min(g.pieces, lesson.target.length)}/${lesson.target.length} piraso` : 'iikot papasok'}`;
+    $('h-best').querySelector('small').textContent = 'Sayang'; $('h-best').querySelector('b').textContent = String(coach ? coach.waste : 0);
+    return;
+  }
   const best = data.best[bestKey()] || 0;
   const k = `${g.score}|${g.level}|${g.lines}|${g.mode !== 'bahay' && g.mode !== 'bagyo' ? Math.floor(g.elapsed / 6) : best}|${g.rise ? Math.ceil(g.rise.t / 60) : ''}|${g.stats.tspins}|${g.stats.maxCombo}|${g.board.filter((v) => v === 8).length}`;
   if (k === hudKey) return;
@@ -472,31 +858,63 @@ function frame(now) {
     // the rules' short pauses stretch to fit the shots: the establishing swoop as the game begins, and
     // a Bayanihan or a new floor while the rows clear. No piece is in play during either.
     let k = 1;
-    if (view && !AUTOPLAY && !reduced()) {
+    if (view && !AUTOPLAY && !reduced() && !match) {
       if (game.phase === 'ready') k = 0.55;
       const c = view.cine;
       if (c && game.phase === 'clear') k = Math.min(1, (game.phaseT / 60) / Math.max(0.05, c.dur - c.t));
     }
-    for (const e of step(game, input, dt * k)) onEvent(e);
+    // every tick: written into the replay, read by the finesse coach and the lesson's check
+    const onTick = (inp, evs) => {
+      if (rec) record(rec, inp);
+      if (coach) { const f = coachTick(coach, inp, evs, game); if (f && (lesson || data.rules.coach)) showFinesse(f); if (lesson) verdict(judge(lesson, game, evs, f)); }
+      else if (lesson) verdict(judge(lesson, game, evs, null));
+    };
+    if (match) onMatch(matchStep(match, input, dt * k, onTick));
+    else for (const e of step(game, input, dt * k, onTick)) onEvent(e);
     hud(game);
+    ghostHud();
     let top = 99; for (let i = 0; i < game.board.length; i++) if (game.board[i]) { top = Math.floor(i / 10); break; }
     highCool -= dt; if (top < 7 && game.phase === 'play' && highCool <= 0) { highCool = 9; say(top < 5 ? 'brink' : 'high', top < 5); }
+  } else if (viewer && mode === 'replay') {
+    // the replay viewer: whole ticks at 1×, 2× or 4×
+    const V = viewer, vs = !!V.pb.rec.head.vs;
+    if (!V.paused) {
+      V.acc += dt * 60 * V.speed;
+      while (V.acc >= 1) {
+        V.acc -= 1;
+        const r = playTick(V.pb);
+        if (!r) { V.paused = true; V.ended = true; viewerUi(); toast('Tapos ang replay · Pindutin ang play para ulitin', 2400); break; }
+        const evA = vs ? r.a : r;
+        for (const e of evA) { if (view) view.event(e, vgame()); else R.event(e, vgame()); if (V.speed === 1 || (e.type !== 'move' && e.type !== 'rotate')) A.event(e); }
+        if (vs) { for (const e of r.b) if (view) view.rivalEvent(e, V.pb.g.b); for (const e of r.x) if (e.type === 'attack' && view) view.attack(e.from, e.sent, e.cancelled); }
+      }
+    }
+    $('rbar').querySelector('.prog i').style.setProperty('--p', `${((V.pb.i / Math.max(1, V.pb.end)) * 100).toFixed(1)}%`);
+    $('rb-time').textContent = `${clock(V.pb.i)} / ${clock(V.pb.end)}`;
+    hud(vgame());
   } else if (!game) {
     if (demo.phase === 'over' || demo.elapsed > 60 * 150) demo = newDemo();
     for (const e of step(demo, bot(demo, { pace: 5 }), dt)) { if (view) view.event(e, demo); else R.event(e, demo); }
   }
-  const g = game || demo;
-  const vmode = mode === 'play' ? 'play' : mode === 'pause' ? 'pause' : mode === 'results' ? 'results' : mode === 'safety' ? 'safety' : 'title';
+  const g = game || vgame() || demo;
+  const rivalG = match ? match.b : viewer && viewer.pb.rec.head.vs ? viewer.pb.g.b : null;
+  const vmode = mode === 'play' || mode === 'replay' ? 'play' : mode === 'pause' ? 'pause' : mode === 'results' ? 'results' : mode === 'safety' ? 'safety' : 'title';
+  const nextN = viewer ? (viewer.pb.rec.head.opts?.next || 5) : data.rules.next;
   if (view) {
-    view.frame(g, dt, { mode: vmode, reduced: reduced(), cine: data.opt.cine, ghost: data.opt.ghost, onThunder: () => A.thunder(), onCeremony: (n) => { big('BAHAY NA!', `${n} palapag · Salamat, bayanihan!`, 2.4); say('ceremony', true); A.event({ type: 'ceremony' }); } });
+    view.frame(g, dt, { mode: vmode, reduced: reduced(), cine: data.opt.cine && !match && !lesson && !viewer, ghost: data.opt.ghost, rival: rivalG, hint: lessonHint(), next: nextN, onThunder: () => A.thunder(), onCeremony: (n) => { big('BAHAY NA!', `${n} palapag · Salamat, bayanihan!`, 2.4); say('ceremony', true); A.event({ type: 'ceremony' }); } });
+    // the rival's bubble over its scaffold
+    rbubbleT -= dt; rsayCool -= dt;
+    const rb = $('rbubble'), rp = view.rivalHead(), ron = rbubbleT > 0 && (mode === 'play' || mode === 'results') && rp.on && !!match;
+    rb.hidden = !ron;
+    if (ron) { const hw = rb.offsetWidth / 2 + 6; rp.x = Math.max(hw, Math.min(innerWidth - hw, rp.x)); rb.style.transform = `translate(${rp.x.toFixed(1)}px, ${rp.y.toFixed(1)}px) translate(-50%, -100%)`; rb.style.opacity = String(Math.min(1, rbubbleT / 0.3)); }
     // Kapatas's bubble follows his head
     bubbleT -= dt; sayCool -= dt;
     const el = $('bubble'), p = view.kapHead(), on = bubbleT > 0 && mode === 'play' && p.on && !view.cine;
     el.hidden = !on;
     if (on) { const hw = el.offsetWidth / 2 + 6; p.x = Math.max(hw, Math.min(innerWidth - hw, p.x)); el.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) translate(-50%, -100%)`; el.style.opacity = String(Math.min(1, bubbleT / 0.3)); }
     bigT -= dt; if (bigT <= 0) $('big').hidden = true;
-  } else R.draw(g, t, { reduced: reduced(), best: game ? data.best[bestKey()] || 0 : 0 });
-  A.update(g, !!game && mode === 'play', dt);
+  } else R.draw(g, t, { reduced: reduced(), best: game ? data.best[bestKey()] || 0 : 0, rival: rivalG, hint: lessonHint(), next: nextN });
+  A.update(g, (!!game && mode === 'play') || (!!viewer && !viewer.paused), dt);
   requestAnimationFrame(frame);
 }
 
@@ -535,10 +953,16 @@ async function boot() {
     import('./foreman.mjs').then(({ loadForeman }) => loadForeman(Q.get('people') || 'assets/people/', (f) => { parts.foreman = f; loaded(); })).then((lib) => view.setPeople(lib)).catch(() => { /* the foreman made in code stays */ }).finally(() => { parts.foreman = 1; loaded(); doneOne(); });
     import('./crowd.mjs').then(({ loadCrowd }) => loadCrowd(Q.get('people') || 'assets/people/')).then((c) => view.setCrowd(c)).catch(() => { /* no neighbours at the store, then */ });
   } else window.__loaded = true;
+  // a shared replay link: #r=<the replay>
+  if (location.hash.startsWith('#r=')) watch(location.hash.slice(3));
   if (TEST) {
     // fast-forward for soak tests: n ticks of the bot, drawing a frame every 20
-    const fast = (n) => { for (let k = 0; k < n; k++) { const g = game; if (!g || mode !== 'play') break; for (const e of step(g, bot(g, { pace: 1 }), 1 / 60)) onEvent(e); if (view && k % 20 === 19) view.frame(g, 1 / 3, { mode: 'play', reduced: reduced(), cine: data.opt.cine, ghost: true }); } return game && game.lines; };
-    window.__hb = { fast, A, get game() { return game; }, get mode() { return mode; }, get demo() { return demo; }, start, get view() { return view; }, pause, resume, openSettings: () => openSettings(mode === 'pause' ? 'pause' : 'title'), data };
+    const fast = (n) => { for (let k = 0; k < n; k++) { const g = game; if (!g || mode !== 'play') break; for (const e of step(g, bot(g, { pace: 1 }), 1 / 60, (inp) => { if (rec) record(rec, inp); })) onEvent(e); if (view && k % 20 === 19) view.frame(g, 1 / 3, { mode: 'play', reduced: reduced(), cine: data.opt.cine, ghost: true }); } return game && game.lines; };
+    // the same for a match: the bot plays your well too
+    const fastVs = (n) => { for (let k = 0; k < n; k++) { if (!match || mode !== 'play' || match.phase !== 'play') break; const out = matchStep(match, bot(match.a, { pace: 4 }), 1 / 60, (inp) => { if (rec) record(rec, inp); }); onMatch(out); if (view && k % 20 === 19) view.frame(game, 1 / 3, { mode: 'play', reduced: reduced(), cine: false, ghost: true, rival: match.b, next: data.rules.next }); } return match && match.tick; };
+    window.__hb = { fast, fastVs, A, get game() { return game; }, get match() { return match; }, get mode() { return mode; }, get demo() { return demo; }, get viewer() { return viewer; }, get coach() { return coach; }, get ghost() { return ghost; }, replays, start, get view() { return view; }, pause, resume, openSettings: () => openSettings(mode === 'pause' ? 'pause' : 'title'), openKeys, openVs, openRival, openLessons, openLesson: (id) => openLesson(lessonById(id)), openReplays, watch, encodeLast: async () => rec && encode(rec), keepReplay: () => keepReplay(game, true), data, showFinesse, setRec: (r) => { rec = r; } };
+    if (Q.get('rival')) { vsPick = Q.get('rival'); }
+    if (Q.get('lesson')) lesson = lessonById(Q.get('lesson'));
     if (Q.get('difficulty')) data.difficulty = Q.get('difficulty');
     if (Q.get('mode')) data.mode = Q.get('mode');
     if (Q.get('go') === '1') { data.safety = true; start(); }

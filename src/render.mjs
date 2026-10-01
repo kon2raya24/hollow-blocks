@@ -235,6 +235,7 @@ export function createRenderer(canvas) {
   }
 
   // ---------- the HUD ----------
+  let opts0 = {};
   function panels(g, best) {
     ctx.textBaseline = 'middle';
     // top bar
@@ -263,14 +264,24 @@ export function createRenderer(canvas) {
     stats.forEach(([k, v], i) => { ctx.fillStyle = '#cfc6b4'; ctx.textAlign = 'left'; ctx.fillText(k, 14, BY + 102 + i * 18); ctx.fillStyle = '#fff8e1'; ctx.textAlign = 'right'; ctx.fillText(String(v), 78, BY + 102 + i * 18); });
     // the queue, on the right
     box(W - 84, BY, 76, 250, 'SUSUNOD');
-    g.queue.forEach((t, i) => boxed(t, W - 46, BY + 38 + i * 46, i === 0 ? 15 : 12, i === 0 ? 1 : 0.85));
+    const N = Math.max(1, Math.min(6, opts0.next || 5));
+    g.queue.slice(0, N).forEach((t, i) => boxed(t, W - 46, BY + 38 + i * (N > 5 ? 39 : 46), i === 0 ? 15 : N > 5 ? 11 : 12, i === 0 ? 1 : 0.85));
+    // Laban: the rival's well in miniature under the queue
+    const rg = opts0.rival;
+    if (rg) {
+      const c = 6, x0 = W - 76, y0 = BY + 262;
+      box(W - 84, y0 - 8, 76, VISIBLE * c + 26, 'KALABAN');
+      ctx.fillStyle = '#26232c'; ctx.fillRect(x0, y0 + 8, COLS * c, VISIBLE * c);
+      for (let y = HIDDEN; y < ROWS; y++) for (let x = 0; x < COLS; x++) { const v = rg.board[y * COLS + x]; if (v) { const m = MATERIALS[v === MUD || v === CEMENT ? v : TYPE_OF[v]]; ctx.fillStyle = m.color; ctx.fillRect(x0 + x * c, y0 + 8 + (y - HIDDEN) * c, c - 0.5, c - 0.5); } }
+      if (rg.cur) for (const [x, y] of cellsOf(rg.cur)) if (y >= HIDDEN) { ctx.fillStyle = MATERIALS[rg.cur.type].color; ctx.fillRect(x0 + x * c, y0 + 8 + (y - HIDDEN) * c, c - 0.5, c - 0.5); }
+    }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
   const clock = (ticks) => { const s = Math.floor(ticks / 60); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
   // ---------- the frame ----------
   function draw(g, t, opts = {}) {
-    reduced = !!opts.reduced;
+    reduced = !!opts.reduced; opts0 = opts;
     const dt = lastT === null ? 0 : clamp(t - lastT, 0, 0.1);
     lastT = t;
     updateFx(dt);
@@ -314,6 +325,9 @@ export function createRenderer(canvas) {
         if (lockGlow) { ctx.fillStyle = `rgba(255,255,255,${lockGlow * 0.35})`; ctx.fillRect(BX + x * C, cellY(y), C, C); }
       }
     }
+    // the lesson's target, and the mud waiting to come up (Laban)
+    if (opts.hint && g.phase === 'play') { ctx.strokeStyle = `rgba(255,210,63,${0.6 + 0.3 * Math.sin(t * 5)})`; ctx.lineWidth = 2.5; for (const [x, y] of opts.hint) if (y >= HIDDEN) ctx.strokeRect(BX + x * C + 2, cellY(y) + 2, C - 4, C - 4); }
+    if (g.incoming && g.incoming.length) { let row = 0; for (const e of g.incoming) for (let k = 0; k < e.n && row < VISIBLE; k++, row++) { ctx.fillStyle = e.t <= 0 ? '#e8402a' : '#b8862a'; ctx.fillRect(BX - 9, BY + (VISIBLE - 1 - row) * C + 2, 6, C - 3); } }
     // rain in a bagyo
     if (g.mode === 'bagyo') {
       while (rain.length < (reduced ? 40 : 120)) rain.push({ x: Math.random() * W, y: Math.random() * H, v: rnd(380, 520) });

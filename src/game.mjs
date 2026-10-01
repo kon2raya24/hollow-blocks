@@ -12,8 +12,17 @@
 // bottom four rows, kreyn swaps the piece for a kawayan, pison knocks every column down to the median
 // height, merienda halves gravity for 15 s. The toolboxes come from their own seeded stream, so the
 // pieces are the same with tools on or off.
+//
+// Rule options (the settings screen's modern controls): das and arr (ticks; arr 0 shifts to the wall at
+// once), soft (rows a tick while soft dropping), rot180 (a half turn, with the SRS+ kicks), hold (on or
+// off) and next (how many pieces are shown, 1 to 6). Left out, each is what the game always used, so a
+// game with no options plays exactly as before.
+//
+// Versus: incoming mud waits in g.incoming ({ n, gap, t }); once armed (t reaches 0) it comes up from
+// below the next time a piece locks without clearing, up to GARBAGE_CAP rows at a time, one gap per
+// attack. versus.mjs decides what is sent and cancelled.
 import { rand } from './rng.mjs';
-import { TYPES, ID, MUD, CEMENT, SHAPES, KICKS } from './pieces.mjs';
+import { TYPES, ID, MUD, CEMENT, SHAPES, KICKS, KICKS180 } from './pieces.mjs';
 
 export const COLS = 10, ROWS = 22, HIDDEN = 2, VISIBLE = 20;
 export const TICK = 1 / 60;
@@ -26,7 +35,10 @@ export const MODES = {
   karera: { key: 'karera', name: 'Karera', goal: null, levels: true, tools: true, limit: 120 * 60 }, // two minutes, score attack
   daily: { key: 'daily', name: 'Daily', goal: null, levels: true, tools: false, limit: 120 * 60 }, // the same pieces for everyone today
   proyekto: { key: 'proyekto', name: 'Proyekto', goal: null, levels: true, tools: true }, // a contract sets the goal and the twist
+  versus: { key: 'versus', name: 'Laban', goal: null, levels: true, tools: false }, // two wells, mud sent across (versus.mjs)
+  training: { key: 'training', name: 'Pagsasanay', goal: null, levels: false, tools: false }, // a lesson's board and pieces (training.mjs)
 };
+export const GARBAGE_CAP = 8, GARBAGE_DELAY = 30;
 export const TOOLS = ['martilyo', 'semento', 'kreyn', 'pison', 'merienda'];
 export const TOOL_MAX = 3, TOOL_EVERY = [8, 12], SLOW_T = 15 * 60, LINDOL_EVERY = 30 * 60;
 export const DIFFICULTY = {
@@ -53,10 +65,11 @@ export function fits(board, p) {
   return true;
 }
 // Turn clockwise (dir 1) or anticlockwise (-1), trying each kick in order: { p, kick } or null.
+// dir 2 is a half turn, with the SRS+ 180 kicks.
 export function rotated(board, p, dir) {
   const to = (p.rot + dir + 4) % 4;
   if (p.type === 'O') return { p: { ...p, rot: to }, kick: 0 };
-  const kicks = KICKS[p.type === 'I' ? 'I' : 'JLSTZ'][`${p.rot}${to}`];
+  const kicks = dir === 2 ? KICKS180[p.type === 'I' ? 'I' : 'JLSTZ'][`${p.rot}${to}`] : KICKS[p.type === 'I' ? 'I' : 'JLSTZ'][`${p.rot}${to}`];
   for (let k = 0; k < kicks.length; k++) {
     const q = { ...p, rot: to, x: p.x + kicks[k][0], y: p.y + kicks[k][1] };
     if (fits(board, q)) return { p: q, kick: k };
@@ -98,8 +111,13 @@ export function tSpin(board, p, lastRot, lastKick) {
 }
 
 // ---------- a game ----------
-export function createGame({ seed = 1, mode = 'bahay', difficulty = 'katamtaman', tools = null, contract = null } = {}) {
+export function createGame({ seed = 1, mode = 'bahay', difficulty = 'katamtaman', tools = null, contract = null, opts = null, board = null, sequence = null } = {}) {
   const diff = DIFFICULTY[difficulty] || DIFFICULTY.katamtaman;
+  const o = opts || {};
+  const rules = {
+    das: Number.isFinite(o.das) ? o.das : diff.das, arr: Number.isFinite(o.arr) ? o.arr : diff.arr, soft: Number.isFinite(o.soft) ? o.soft : SOFT,
+    rot180: !!o.rot180, hold: o.hold !== false, next: Math.max(1, Math.min(6, Number.isFinite(o.next) ? o.next : NEXT)),
+  };
   const m = MODES[mode] || MODES.bahay;
   const c = contract || {};
   const toolsOn = tools === null ? !!m.tools && c.tools !== false : !!tools;
@@ -111,20 +129,23 @@ export function createGame({ seed = 1, mode = 'bahay', difficulty = 'katamtaman'
     tick: 0, acc: 0, elapsed: 0, fall: 0, lockT: 0, resets: 0, lowest: 0, das: null, lastRot: false, lastKick: 0,
     phase: 'ready', phaseT: READY, clearing: null, pieces: 0, stats: { bayanihan: 0, tspins: 0, maxCombo: 0, tools: 0, perfect: 0, holds: 0, lindol: 0 },
     riseDef: c.rise || m.rise || null, rise: (c.rise || m.rise) ? { t: (c.rise || m.rise).start } : null,
-    contract: contract || null, goal: c.goal || null, limit: c.limit || m.limit || 0, holdLimit: c.holdLimit ?? null,
+    contract: contract || null, goal: c.goal || null, limit: c.limit || m.limit || 0, holdLimit: rules.hold ? c.holdLimit ?? null : 0, rules, incoming: [],
+    seq: sequence ? [...sequence] : null,
     lindol: c.lindol ? { t: c.lindol, every: c.lindol, dir: 1 } : null,
     toolsOn, tools: [], boxes: [], toolIn: 0, slowT: 0, trs: { rs: (seed * 40503 + 12345) >>> 0 }, grs: { rs: (seed * 69069 + 777) >>> 0 },
   };
   g.start = start; g.level = start;
   if (toolsOn) g.toolIn = TOOL_EVERY[0] + Math.floor(rand(g.trs) * (TOOL_EVERY[1] - TOOL_EVERY[0] + 1));
   // a messy foundation: rows of rubble at the bottom, one gap each
+  if (board) g.board = board.slice();
   if (c.garbage) for (let r = 0; r < c.garbage; r++) { const y = ROWS - 1 - r, gap = Math.floor(rand(g.grs) * COLS); for (let x = 0; x < COLS; x++) if (x !== gap) g.board[y * COLS + x] = MUD; }
-  while (g.queue.length < NEXT) g.queue.push(fromBag(g));
+  while (g.queue.length < Math.max(NEXT, rules.next)) g.queue.push(fromBag(g));
   return g;
 }
 
 // The 7-piece bag: every piece once, in a shuffled order, then a new bag.
 function fromBag(g) {
+  if (g.seq && g.seq.length) return g.seq.shift(); // a lesson's pieces first
   if (!g.bag.length) {
     const b = [...TYPES];
     for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(rand(g) * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; }
@@ -150,13 +171,17 @@ function next(g, ev) {
   spawn(g, t, ev);
 }
 
-export function step(g, input = NOINPUT, dt = TICK) {
+// onTick (optional) sees each tick's input and events: replays record the input, the finesse coach
+// and the lessons read both.
+export function step(g, input = NOINPUT, dt = TICK, onTick = null) {
   g.inbox = { held: input.held || [], pressed: [...(g.inbox?.pressed || []), ...(input.pressed || [])] };
   g.acc += Math.min(dt, 0.1);
   const ev = [];
   while (g.acc >= TICK - 1e-9) {
     g.acc -= TICK;
-    ev.push(...tick(g, g.inbox));
+    const e = tick(g, g.inbox);
+    if (onTick) onTick(g.inbox, e);
+    ev.push(...e);
     g.inbox = { held: g.inbox.held, pressed: [] };
   }
   return ev;
@@ -165,6 +190,7 @@ export function step(g, input = NOINPUT, dt = TICK) {
 export function tick(g, input = NOINPUT) {
   const ev = [];
   g.tick++;
+  if (g.incoming.length && (g.phase === 'play' || g.phase === 'clear')) for (const e of g.incoming) if (e.t > 0) e.t--;
   switch (g.phase) {
     case 'ready':
       if (--g.phaseT <= 0) { g.phase = 'play'; ev.push({ type: 'go' }); next(g, ev); }
@@ -200,8 +226,8 @@ function play(g, input, ev) {
     g.holdUsed = true;
     ev.push({ type: 'hold', piece: was });
   }
-  for (const [act, dir] of [['cw', 1], ['ccw', -1]]) {
-    if (!P.includes(act)) continue;
+  for (const [act, dir] of [['cw', 1], ['ccw', -1], ['r180', 2]]) {
+    if (!P.includes(act) || (dir === 2 && !g.rules.rot180)) continue;
     const r = rotated(g.board, g.cur, dir);
     if (r) { g.cur = r.p; g.lastRot = true; g.lastKick = r.kick; moved(g); ev.push({ type: 'rotate', kick: r.kick }); }
   }
@@ -213,10 +239,11 @@ function play(g, input, ev) {
     return true;
   };
   const pl = P.includes('left'), pr = P.includes('right');
+  const { das, arr } = g.rules;
   if (pl || pr) { const d = pr && !pl ? 1 : pl && !pr ? -1 : (P.lastIndexOf('right') > P.lastIndexOf('left') ? 1 : -1); shift(d); g.das = { dir: d, t: 0 }; }
   else if (g.das && H.includes(g.das.dir < 0 ? 'left' : 'right')) {
     g.das.t++;
-    if (g.das.t >= g.diff.das && (g.das.t - g.diff.das) % g.diff.arr === 0) shift(g.das.dir);
+    if (g.das.t >= das) { if (arr <= 0) { while (shift(g.das.dir)); } else if ((g.das.t - das) % arr === 0) shift(g.das.dir); }
   } else g.das = null;
   // hard drop: straight down and locked
   if (P.includes('hard')) {
@@ -230,7 +257,7 @@ function play(g, input, ev) {
   // gravity, and the soft drop
   if (g.slowT > 0) g.slowT--;
   const G = gravity(g.level, g.diff) * (g.slowT > 0 ? 0.5 : 1), soft = H.includes('down');
-  g.fall += soft ? Math.max(G, SOFT) : G;
+  g.fall += soft ? Math.max(G, g.rules.soft) : G;
   while (g.fall >= 1) {
     const q = { ...g.cur, y: g.cur.y + 1 };
     if (!fits(g.board, q)) { g.fall = 0; break; }
@@ -263,6 +290,7 @@ function lock(g, ev) {
     g.combo = -1;
     if (spin) { const pts = (spin === 'mini' ? POINTS.mini[0] : POINTS.tspin[0]) * g.level; g.score += pts; g.stats.tspins++; ev.push({ type: 'tspin', kind: spin, lines: 0, points: pts }); }
     if (goalMet(g)) { done(g, ev); return; }
+    if (g.incoming.length && !takeGarbage(g, ev)) return;
     next(g, ev);
     return;
   }
@@ -277,6 +305,7 @@ function lock(g, ev) {
   if (n === 4) g.stats.bayanihan++;
   if (spin) g.stats.tspins++;
   if (spin === 'full' && n === 3) g.stats.tspinTriple = (g.stats.tspinTriple || 0) + 1;
+  if (spin === 'full') { g.stats.spin = g.stats.spin || [0, 0, 0, 0]; g.stats.spin[n]++; }
   g.stats.maxCombo = Math.max(g.stats.maxCombo, g.combo);
   ev.push({ type: 'lines', n, rows, spin, b2b, combo: g.combo, points: pts });
   // a toolbox in a cleared row, or a Bayanihan, banks a tool
@@ -287,6 +316,34 @@ function lock(g, ev) {
     if (level > g.level) { g.level = level; ev.push({ type: 'levelUp', level }); }
   }
   g.clearing = rows; g.phase = 'clear'; g.phaseT = CLEAR_T;
+}
+
+// Versus: mud arrives (from versus.mjs), one gap per attack, rolled on the receiver's own stream.
+export function receive(g, n) {
+  if (n > 0) g.incoming.push({ n, gap: Math.floor(rand(g.grs) * COLS), t: GARBAGE_DELAY });
+}
+// A clear's attack first cancels mud still waiting; what is left over is returned, to be sent.
+export function cancel(g, n) {
+  while (n > 0 && g.incoming.length) { const e = g.incoming[0], k = Math.min(n, e.n); e.n -= k; n -= k; if (!e.n) g.incoming.shift(); }
+  return n;
+}
+export const pendingRows = (g) => g.incoming.reduce((a, e) => a + e.n, 0);
+// Armed mud comes up from below: rows of MUD, each attack's rows sharing a gap. Anything pushed past the
+// top ends the game. Returns false if it did.
+function takeGarbage(g, ev) {
+  let room = GARBAGE_CAP, rows = 0;
+  while (room > 0 && g.incoming.length && g.incoming[0].t <= 0) {
+    const e = g.incoming[0], k = Math.min(e.n, room);
+    for (let i = 0; i < k; i++) {
+      if (g.board.slice(0, COLS).some(Boolean)) { if (rows) ev.push({ type: 'garbage', rows }); over(g, ev); return false; }
+      g.board = [...g.board.slice(COLS), ...Array.from({ length: COLS }, (_, x) => (x === e.gap ? 0 : MUD))];
+    }
+    g.boxes = g.boxes.map(([x, y]) => [x, y - k]).filter(([, y]) => y >= 0);
+    e.n -= k; room -= k; rows += k;
+    if (!e.n) g.incoming.shift();
+  }
+  if (rows) ev.push({ type: 'garbage', rows });
+  return true;
 }
 
 // Bagyo: the flood pushes a row of mud up from the bottom, with one gap, faster and faster.
@@ -323,6 +380,7 @@ export function goalMet(g) {
   if (!q) return false;
   if (q.lines && g.lines < q.lines) return false;
   if (q.tspins && g.stats.tspins < q.tspins) return false;
+  if (q.spinLines && !(g.stats.spin && g.stats.spin[q.spinLines] > 0)) return false;
   if (q.bayanihan && g.stats.bayanihan < q.bayanihan) return false;
   if (q.combo && g.stats.maxCombo < q.combo) return false;
   if (q.score && g.score < q.score) return false;
@@ -384,5 +442,5 @@ export function ghostOf(g) { return g.cur ? dropped(g.board, g.cur) : null; }
 
 // A stable fingerprint of everything that matters, for replay tests.
 export function hashState(g) {
-  return JSON.stringify([g.tick, g.phase, g.score, g.lines, g.level, g.board.join(''), g.cur, g.hold, g.queue, g.rs, g.combo, g.b2b, g.rise, g.tools, g.boxes, g.slowT, g.lindol]);
+  return JSON.stringify([g.tick, g.phase, g.score, g.lines, g.level, g.board.join(''), g.cur, g.hold, g.queue, g.rs, g.combo, g.b2b, g.rise, g.tools, g.boxes, g.slowT, g.lindol, g.incoming]);
 }

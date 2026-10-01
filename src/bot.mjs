@@ -2,7 +2,7 @@
 // from hold) it tries every turn and column with the rules' own board helpers, scores the board it
 // would leave with the classic El-Tetris weights, and then presses the keys a person would: hold,
 // turns, shifts, hard drop.
-import { COLS, ROWS, fits, rotated, dropped, place, clearRows, spawnPiece, cellsOf, NOINPUT } from './game.mjs';
+import { COLS, ROWS, fits, rotated, dropped, place, clearRows, spawnPiece, cellsOf, tSpin, NOINPUT } from './game.mjs';
 
 const W = { height: -4.500158825082766, lines: 3.4181268101392694, rowT: -3.2178882868487753, colT: -9.348695305445199, holes: -7.899265427351652, wells: -3.3855972247263626 };
 
@@ -34,7 +34,25 @@ function evaluate(board, p, style = null) {
     for (let y = 0; y < ROWS; y++) if (filled(COLS - 2, y) && !filled(COLS - 1, y)) rowR++;
     v += (high ? 0 : -9 * inWell - W.wells * wellR - W.rowT * rowR) + (rows.length === 4 ? 120 : rows.length && !high ? -30 : 0);
   }
+  if (style === 'tspin') v += SLOT * Math.min(1, tSlots(after));
   return v;
+}
+
+// Open T-spin double slots: a T pointing down would fit, rest, and fill two rows with three corners set.
+let SLOT = 60;
+export const setSlot = (v) => { SLOT = v; }; // for tuning
+function tSlots(b) {
+  let n = 0;
+  for (let y = 2; y < ROWS - 2; y++) for (let x = 0; x <= COLS - 3; x++) {
+    const p = { type: 'T', rot: 2, x, y };
+    if (!fits(b, p) || fits(b, { ...p, y: y + 1 })) continue;
+    const r1 = y + 1, r2 = y + 2;
+    let ok = true;
+    for (let c = 0; c < COLS && ok; c++) { if (c < x || c > x + 2) { if (!b[r1 * COLS + c]) ok = false; } if (c !== x + 1 && !b[r2 * COLS + c]) ok = false; }
+    if (!ok || !(b[y * COLS + x] || b[y * COLS + x + 2])) continue;
+    n++;
+  }
+  return n;
 }
 
 // Every place a piece can be dropped from the top, with the keys that get it there.
@@ -80,6 +98,50 @@ export function choose(g, style = null) {
   return now;
 }
 
+// Every placement of a piece, best first (the versus rivals pick a worse one now and then).
+export function ranked(board, type, style = null) {
+  return placements(board, type).map((c) => ({ ...c, v: evaluate(board, c.land, style) })).sort((a, b) => b.v - a.v);
+}
+
+// T-spins: from every place a T can be dropped to, soft drop to the floor and turn once more. If the
+// turn leaves it resting with three corners filled (a full spin by the rules), it's a candidate; the
+// keys say 'soft' for "hold down until it lands".
+export function spinPlacements(board, type) {
+  if (type !== 'T') return [];
+  const out = [], seen = new Set();
+  for (const c of placements(board, type)) {
+    for (const [k, dir] of [['cw', 1], ['ccw', -1]]) {
+      const r = rotated(board, c.land, dir);
+      if (!r || fits(board, { ...r.p, y: r.p.y + 1 }) || tSpin(board, r.p, true, r.kick) !== 'full') continue;
+      const id = `${r.p.rot},${r.p.x},${r.p.y}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push({ keys: [...c.keys.slice(0, -1), 'soft', k, 'hard'], land: r.p, spin: true });
+    }
+  }
+  return out;
+}
+// A T-spinner's choice: the usual placements plus the spins, a spin that clears paying well (and with
+// the 'tspin' style, an open T-slot on the board is worth keeping).
+export function chooseSpin(g, style = 'tspin') {
+  const best = (type) => {
+    let top = null;
+    for (const c of [...placements(g.board, type), ...spinPlacements(g.board, type)]) {
+      let v = evaluate(g.board, c.land, style);
+      if (c.spin) v += TUNE.spin * place(g.board, c.land).rows.length;
+      if (!top || v > top.v) top = { ...c, v };
+    }
+    return top;
+  };
+  const now = best(g.cur.type);
+  if (!g.holdUsed && (g.holdLimit == null || g.stats.holds < g.holdLimit)) {
+    const other = best(g.hold || g.queue[0]);
+    if (other && (!now || other.v > now.v + 1)) return { keys: ['hold', ...other.keys], v: other.v };
+  }
+  return now;
+}
+
+export const TUNE = { spin: 40 };
 const MEM = new WeakMap();
 
 // pace: ticks between key presses (a person-like rhythm on the title screen).

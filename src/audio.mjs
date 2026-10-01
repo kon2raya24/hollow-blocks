@@ -138,6 +138,7 @@ export function createAudio({ base = 'assets/sfx/' } = {}) {
         case 'ceremony': { [60, 64, 67, 72, 67, 72, 76, 79].forEach((n, i) => { tone(NOTE(n), 0.3, 'square', 0.025, 0.2 + i * 0.13); tone(NOTE(n - 12), 0.3, 'triangle', 0.04, 0.2 + i * 0.13); }); hiss(2.5, 700, 0.1, 0.1, 'bandpass', 900); play('bell', 0.4, 1, 0.2); play('bell', 0.3, 1.5, 1.1); break; }
         case 'levelUp': [67, 71, 74, 79].forEach((n, i) => tone(NOTE(n), 0.14, 'square', 0.045, i * 0.09)); play('bell', 0.3, 1.3, 0.2); break;
         case 'rise': tone(60, 0.5, 'sawtooth', 0.06, 0, 0.7); hiss(0.4, 300, 0.1, 0, 'lowpass'); play('soft', 0.8, 0.7); break;
+        case 'garbage': tone(70, 0.4, 'sawtooth', 0.05, 0, 0.7); play('soft', 0.7, 0.6); play('heavy', 0.3, 0.7, 0.05); break;
         case 'gameover': hiss(1.6, 600, 0.26, 0, 'lowpass', 60); for (let k = 0; k < 6; k++) play(k % 2 ? 'mining' : 'heavy', 0.45, 0.6 + Math.random() * 0.3, k * 0.09); [67, 64, 60, 55].forEach((n, i) => tone(NOTE(n), 0.4, 'triangle', 0.07, 0.2 + i * 0.28)); break;
         case 'done': [67, 71, 74, 79, 74, 79, 83].forEach((n, i) => tone(NOTE(n), 0.16, 'square', 0.05, i * 0.11)); break;
         case 'go': [67, 74, 79].forEach((n, i) => tone(NOTE(n), 0.12, 'triangle', 0.05, i * 0.1)); break;

@@ -9,6 +9,10 @@
 // a few centimetres on impacts (not at all with reduced motion). The cinematic shots (the establishing
 // swoop, a Bayanihan, a new floor) play only while no piece is live, and the page stretches the rules'
 // short clear pause to cover them.
+//
+// Laban (versus) adds the rival's scaffold beside yours (rival3d.mjs) and draws its game there, with a
+// stack of mud sacks by each well for the rows waiting to come up; the camera widens to take in both.
+// Pagsasanay (training) draws the lesson's target as a pulsing gold ghost.
 import * as THREE from './vendor/three.module.min.js';
 import { COLS, ROWS, HIDDEN, CLEAR_T, READY, cellsOf, ghostOf } from './game.mjs';
 import { SHAPES } from './pieces.mjs';
@@ -23,6 +27,7 @@ import { foremanModel, driveForeman, foremanEvent } from './foreman.mjs';
 import { buildCrowd } from './crowd.mjs';
 import { createToolFx } from './toolfx.mjs';
 import { TOOLS } from './game.mjs';
+import { buildRivalRig } from './rival3d.mjs';
 
 const TAU = Math.PI * 2;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -115,7 +120,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   toolbox.count = 0; toolbox.frustumCulled = false; scene.add(toolbox);
 
   // ---------- the blocks, instanced per material ----------
-  const MAXB = 270, blocks = {};
+  const MAXB = 480, blocks = {}; // room for two wells of mud in a match
   for (const [k, m] of Object.entries(mats)) {
     const g = blockGeometry(); g.setAttribute('aGlow', new THREE.InstancedBufferAttribute(new Float32Array(MAXB), 1));
     const im = new THREE.InstancedMesh(g, m, MAXB); im.count = 0; im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false;
@@ -124,6 +129,9 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   }
   const ghostM = new THREE.MeshBasicMaterial({ map: ghostTexture(), transparent: true, depthWrite: false, toneMapped: false, color: '#ffffff' });
   const ghost = new THREE.InstancedMesh(new THREE.BoxGeometry(CS * 0.94, CS * 0.94, CS * 0.8), ghostM, 4); ghost.count = 0; ghost.frustumCulled = false; ghost.renderOrder = 3; scene.add(ghost);
+  // the lesson's target: a gold outline that breathes
+  const hintM = new THREE.MeshBasicMaterial({ map: ghostTexture(), transparent: true, depthWrite: false, toneMapped: false, color: '#ffd23f' });
+  const hintMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(CS * 1.0, CS * 1.0, CS * 0.86), hintM, 4); hintMesh.count = 0; hintMesh.frustumCulled = false; hintMesh.renderOrder = 4; scene.add(hintMesh);
   const m4 = new THREE.Matrix4(), q0 = new THREE.Quaternion(), qa = new THREE.Quaternion(), ea = new THREE.Euler(), vp = new THREE.Vector3(), vs = new THREE.Vector3(), cW = new THREE.Color();
   function put(key, x, y, z, s = 1, glow = 0, tint = 1, rot = null) {
     const im = blocks[key]; if (!im || im.count >= MAXB) return;
@@ -158,6 +166,12 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   let todNow = { ...TOD.golden }, todKey = 'golden', todTo = null, todK = 0, stormOn = false, hazeOn = false;
 
   function resetState() { orient = new Uint8Array(COLS * ROWS); pending = null; collapsed = false; riseT = 0; cine = null; fx.clear(); site.resetBunting(); }
+  // the rival's well (a match): its own orientation memory, clears and rises
+  let rig = null, vsOn = false;
+  const R = { g: null, orient: new Uint8Array(COLS * ROWS), pending: null, riseT: 0, collapsed: false };
+  const rx = (x) => rig.RX + cx(x) * rig.S, ry = (y) => rig.LIFT + cy(y) * rig.S;
+  const shiftUp = (o, n) => { const a = new Uint8Array(COLS * ROWS); a.set(o.subarray(n * COLS)); return a; };
+  function dropRows(o, rows) { const keep = []; for (let y = 0; y < ROWS; y++) if (!rows.includes(y)) keep.push(o.slice(y * COLS, y * COLS + COLS)); const out = new Uint8Array(COLS * ROWS); keep.reverse().forEach((row, i) => out.set(row, (ROWS - 1 - i) * COLS)); return out; }
 
   // ---------- the camera ----------
   const cam = { pos: new THREE.Vector3(0, 6, 30), look: new THREE.Vector3(0, 5, 0), fov: 30, mode: 'title', blend: 1, from: null };
@@ -170,7 +184,15 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     layout = site.layoutBoards(compact);
     kap.x = compact ? -3.3 : -4.35; kap.z = compact ? 2.6 : 1.4;
     const fov = compact ? 34 : 30, t = Math.tan((fov * Math.PI) / 360);
-    const x0 = layout.x0 - 0.15, x1 = layout.x1 + 0.15, y0 = compact ? 0.05 : -0.35, y1 = layout.yTop;
+    let x0 = layout.x0 - 0.15, x1 = layout.x1 + 0.15, y0 = compact ? 0.05 : -0.35, y1 = layout.yTop;
+    if (vsOn && rig) {
+      // the rival's scaffold to the right: full size on a wide screen, smaller on a phone
+      const S = compact ? 0.5 : 0.84, half = (WELL.x1 - WELL.x0) / 2 + 0.5, lift = compact ? 1.6 : 1.45;
+      rig.place(layout.x1 + 0.35 + half * S, S, lift, compact ? 1.0 : 0.9);
+      x1 = rig.RX + half * S + 0.15;
+      y1 = Math.max(y1, lift + (WELL.top + 1.6) * S);
+      if (!compact) x0 = layout.x0 - 0.1;
+    }
     const hf = Math.max(0.3, 1 - (insets.top + insets.bottom) / H) * 0.98, wf = compact ? 0.96 : 0.97;
     const frameH = Math.max((y1 - y0) / hf, (x1 - x0) / (aspect * wf));
     const D = frameH / (2 * t);
@@ -325,6 +347,14 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         if (g.mode === 'bahay' && (1 + Math.floor(g.lines / 10)) % 5 === 0) { site.raiseBunting(); cheerT = 4.5; reactKapatas('victory'); fx.confetti(0, WELL.top + 2, 1, 200); fx.confetti(hx, hy + 4, hz + 2, 120); if (o0.onCeremony) o0.onCeremony(1 + Math.floor(g.lines / 10)); }
         break;
       }
+      case 'garbage': {
+        riseT = 1; orient = shiftUp(orient, e.rows);
+        for (let x = 0; x < COLS; x++) { fx.puff(cx(x), BASE_Y + 0.1, 0.4, '#6a5038', { size: rnd(0.3, 0.6), vy: rnd(0.4, 1.4), vz: rnd(0.4, 1.4), life: 0.9, a: 0.6 }); fx.chunk('putik', cx(x) + rnd(-0.2, 0.2), BASE_Y + 0.2, 0.3, rnd(-1.2, 1.2), rnd(1.5, 3.5), rnd(0.5, 2), rnd(0.03, 0.06)); }
+        fx.callout(`+${e.rows} PUTIK`, 0, cy(ROWS - e.rows) + 0.4, 1.2, { color: 'orange', height: 0.7, life: 1.2 });
+        if (!reduced) kickV -= 0.04 + e.rows * 0.01;
+        reactKapatas('cheer'); kap.react = 'worry'; kap.reactT = 1.4;
+        break;
+      }
       case 'rise': {
         riseT = 1;
         for (let x = 0; x < COLS; x++) { fx.puff(cx(x), BASE_Y + 0.1, 0.4, '#6a5038', { size: rnd(0.3, 0.6), vy: rnd(0.4, 1.4), vz: rnd(0.4, 1.4), life: 0.9, a: 0.6 }); for (let k = 0; k < 2; k++) fx.chunk('putik', cx(x) + rnd(-0.2, 0.2), BASE_Y + 0.2, 0.3, rnd(-1.2, 1.2), rnd(1.5, 3.5), rnd(0.5, 2), rnd(0.03, 0.06)); }
@@ -366,6 +396,55 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       case 'done': reactKapatas('victory'); fx.confetti(0, WELL.y1, 1.5, 220); if (!reduced) flashK = 0.2; break;
       default: break;
     }
+  }
+
+ // the rival's events, drawn on its scaffold
+  function rivalEvent(e, g) {
+    if (!rig) return;
+    if (R.g !== g) { R.g = g; R.orient = new Uint8Array(COLS * ROWS); R.pending = null; R.collapsed = false; }
+    const S = rig.S;
+    switch (e.type) {
+      case 'spawn': if (R.pending) { R.orient = dropRows(R.orient, R.pending); R.pending = null; } break;
+      case 'lock': {
+        const vert = e.piece === 'I' && new Set(e.cells.map(([x]) => x)).size === 1;
+        for (const [x, y] of e.cells) if (y >= 0) R.orient[y * COLS + x] = vert ? 1 : 0;
+        for (const [x, y] of e.cells) fx.puff(rx(x), ry(y) - CS * S / 2, rig.Z + 0.2, '#cfc4b0', { size: rnd(0.2, 0.4) * S, vy: rnd(0.1, 0.4), vz: rnd(0.2, 0.6), life: 0.6, a: 0.35 });
+        break;
+      }
+      case 'lines': {
+        R.pending = e.rows.slice();
+        for (const r of e.rows) { for (let x = 0; x < COLS; x++) { const v = g.board[r * COLS + x]; if (!v) continue; const key = v === 1 ? 'kawayan' : KEYS[v]; fx.chunk(key, rx(x), ry(r), rig.Z + 0.2, rnd(-1.2, 1.2), rnd(0.5, 3.5) * S, rnd(1, 3) * S, rnd(0.05, 0.1) * S); } fx.bar(rig.RX, ry(r), rig.Z + 0.3, 5.2 * S, CS * 0.9 * S, e.n === 4 ? '#ffd27a' : '#fff4dc', 0.28, { grow: 0.8 }); }
+        const midY = e.rows.reduce((a, r) => a + ry(r), 0) / e.rows.length;
+        const word = e.spin ? (e.spin === 'mini' ? 'MINI T-SPIN' : `T-SPIN ${['', 'SINGLE', 'DOUBLE', 'TRIPLE'][e.n]}!`) : WORDS[e.n];
+        if (e.n >= 2 || e.spin) fx.callout(word, rig.RX, midY + 0.35, rig.Z + 1.2, { color: e.spin ? 'pink' : e.n === 4 ? 'gold' : 'white', height: (e.spin ? 0.95 : 0.8) * Math.max(0.7, S), life: 1.3 });
+        if (e.n === 4) fx.confetti(rig.RX, ry(ROWS - 20) + 4 * S, 1, 60);
+        break;
+      }
+      case 'garbage': R.riseT = 1; R.orient = shiftUp(R.orient, e.rows); for (let x = 0; x < COLS; x++) fx.puff(rx(x), ry(ROWS - 1), rig.Z + 0.4, '#6a5038', { size: rnd(0.3, 0.5) * S, vy: rnd(0.4, 1.2), vz: rnd(0.4, 1.2), life: 0.8, a: 0.55 }); break;
+      case 'gameover': {
+        R.collapsed = true;
+        for (let y = HIDDEN; y < ROWS; y++) for (let x = 0; x < COLS; x++) { const v = g.board[y * COLS + x]; if (!v) continue; fx.chunk(v === 1 ? 'kawayan' : KEYS[v], rx(x), ry(y), rig.Z + rnd(0, 0.2), rnd(-0.8, 0.8), rnd(-1.5, 1), rnd(0.8, 3.2), rnd(0.07, 0.12) * S); }
+        for (let k = 0; k < 18; k++) fx.puff(rig.RX + rnd(-3, 3) * S, 0.3, rnd(0, 2), '#d8ccb8', { size: rnd(1, 2), vx: rnd(-2, 2), vy: rnd(0.2, 1), vz: rnd(0, 2), life: rnd(2, 3.5), a: 0.4, grow: 1.8 });
+        if (!reduced) shake = 0.35;
+        fx.confetti(0, WELL.top + 1, 1.2, 200); cheerT = 4; reactKapatas('victory');
+        break;
+      }
+      default: break;
+    }
+  }
+  // mud crossing over: sacks flung from the sender's well toward the other's gauge, and the count
+  function attack(from, n, cancelled) {
+    if (!rig) return;
+    const sx = from ? rig.RX : 0, tx = from ? WELL.x0 - 0.4 : rig.RX + (WELL.x0 - 0.4) * rig.S, y0 = from ? ry(8) : cy(8);
+    // (the rival's side sits forward, on its deck)
+    for (let k = 0; k < Math.min(24, 4 + n * 3); k++) fx.chunk('putik', sx + rnd(-1, 1), y0 + rnd(-1, 1), 0.6, (tx - sx) * rnd(0.55, 0.8), rnd(2.5, 5), rnd(0.3, 1.2), rnd(0.05, 0.1));
+    if (n > 0) fx.callout(`+${n} PUTIK`, from ? WELL.x0 - 0.4 : tx, (from ? cy(14) : ry(14)), from ? 1.3 : rig.Z + 1.3, { color: 'orange', height: from ? 0.62 : 0.62 * Math.max(0.7, rig.S), life: 1.4, delay: 0.25 });
+    if (cancelled > 0) fx.callout(`HARANG ${cancelled}`, from ? rig.RX : 0, (from ? ry(6) : cy(6)), 1.3, { color: 'blue', height: 0.5, life: 1.1, delay: 0.1 });
+  }
+  function setVersus(on, prof = null) {
+    if (on && !rig) rig = buildRivalRig(scene);
+    if (rig) { rig.show(on); if (on && prof) rig.setName(prof.name, prof.tag || prof.name, prof.color || '#ffd23f'); }
+    vsOn = on; R.g = null; fit();
   }
 
   // ---------- each frame ----------
@@ -475,6 +554,31 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         pieceLight.position.set(sx / 4, sy / 4, 1.0); pieceLight.color.set(GHOST_COLORS[cur.type]); pieceLight.intensity = 2.2 + lk * 3;
       } else pieceLight.intensity = 0;
     } else pieceLight.intensity = 0;
+    // the lesson's target
+    hintMesh.count = 0;
+    if (o.hint && g && g.phase === 'play') {
+      hintM.color.set('#ffd23f'); hintM.opacity = 0.55 + 0.35 * Math.sin(t * 5);
+      for (const [x, y] of o.hint) { m4.compose(vp.set(cx(x), cy(y), 0), q0, vs.setScalar(1 + 0.04 * Math.sin(t * 5))); hintMesh.setMatrixAt(hintMesh.count++, m4); }
+      hintMesh.instanceMatrix.needsUpdate = true;
+    }
+    hintMesh.visible = hintMesh.count > 0;
+    // the rival's well
+    if (rig && vsOn && o.rival) {
+      const rg = o.rival, S = rig.S;
+      if (R.g !== rg) { R.g = rg; R.orient = new Uint8Array(COLS * ROWS); R.pending = null; R.collapsed = false; }
+      R.riseT = Math.max(0, R.riseT - dt / 0.16);
+      if (!R.collapsed) {
+        const clearing = rg.phase === 'clear' && rg.clearing ? rg.clearing : null;
+        const pr = clearing ? clamp(1 - (rg.phaseT - rg.acc * 60) / CLEAR_T, 0, 1) : 0, fall = pr < 0.3 ? 0 : ((pr - 0.3) / 0.7) ** 2, off = -ease(R.riseT) * CS * S;
+        for (let y = 0; y < ROWS; y++) {
+          if (clearing && clearing.includes(y)) continue;
+          const drop = clearing ? clearing.filter((r) => r > y).length : 0;
+          for (let x = 0; x < COLS; x++) { const v = rg.board[y * COLS + x]; if (!v) continue; put(v === 1 ? (R.orient[y * COLS + x] ? 'kawayanV' : 'kawayan') : KEYS[v], rx(x), ry(y) - drop * CS * S * fall + off, rig.Z, S, 0, rg.phase === 'over' ? 0.45 : 1); }
+        }
+        if (rg.cur && rg.phase === 'play') for (const [x, y] of cellsOf(rg.cur)) if (y >= 0) put(keyOf(rg.cur.type, rg.cur.rot), rx(x), ry(y), rig.Z, S, 0.18);
+      }
+      rig.gauges([{ x: WELL.x0 - 0.4, s: 1, list: g ? g.incoming || [] : [] }, { x: rig.RX + (WELL.x0 - 0.4) * S, s: S, y: rig.LIFT, z: rig.Z, list: rg.incoming || [] }], dt, t);
+    }
     // the hold and the queue, on their boards
     if (g && layout) {
       const hb = site.boards.hold.userData.rect, nb = site.boards.next.userData.rect;
@@ -485,9 +589,11 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       };
       const hs = compact ? 0.48 : 0.72;
       if (g.hold) mini(g.hold, hb.cx, hb.cy - hb.h * 0.08, hs * (1 + holdT * 0.15), g.holdUsed ? 0.4 : 1, holdT * 0.4);
-      const slots = g.queue.slice(0, 5), top0 = nb.cy + nb.h / 2 - nb.h * 0.22;
-      if (nb.row) slots.forEach((type, i) => mini(type, nb.cx - nb.w * 0.36 + (i === 0 ? 0 : 0.75 + (i - 1) * 0.6), nb.cy - nb.h * 0.08, (i === 0 ? 0.42 : 0.27) * (i === 0 ? 1 + spawnT * 0.08 : 1), i === 0 ? 1 : 0.88, i === 0 ? 0.1 : 0));
-      else slots.forEach((type, i) => mini(type, nb.cx, top0 - (i === 0 ? 0 : nb.h * 0.08 + i * nb.h * 0.148), (i === 0 ? hs : hs * 0.78) * (i === 0 ? 1 + spawnT * 0.08 : 1), i === 0 ? 1 : 0.88, i === 0 ? 0.1 : 0));
+      // the queue: five by default, one to six by the settings, spaced to fit the board
+      const N = clamp(o.next || 5, 1, 6), slots = g.queue.slice(0, N), top0 = nb.cy + nb.h / 2 - nb.h * 0.22;
+      const gapR = N > 5 ? 0.48 : 0.6, gapC = N > 5 ? 0.118 : 0.148, sc = N > 5 ? 0.86 : 1;
+      if (nb.row) slots.forEach((type, i) => mini(type, nb.cx - nb.w * 0.36 + (i === 0 ? 0 : 0.75 + (i - 1) * gapR), nb.cy - nb.h * 0.08, (i === 0 ? 0.42 : 0.27 * sc) * (i === 0 ? 1 + spawnT * 0.08 : 1), i === 0 ? 1 : 0.88, i === 0 ? 0.1 : 0));
+      else slots.forEach((type, i) => mini(type, nb.cx, top0 - (i === 0 ? 0 : nb.h * 0.08 + i * nb.h * gapC), (i === 0 ? hs : hs * 0.78 * sc) * (i === 0 ? 1 + spawnT * 0.08 : 1), i === 0 ? 1 : 0.88, i === 0 ? 0.1 : 0));
       site.drawTally(g.mode === 'bagyo' && g.rise ? [['Oras', fmt(g.elapsed)], ['Bayanihan', g.stats.bayanihan], ['T-spin', g.stats.tspins], ['Baha', `${Math.ceil(g.rise.t / 60)}s`]] : [['Oras', fmt(g.elapsed)], ['Bayanihan', g.stats.bayanihan], ['T-spin', g.stats.tspins], ['Combo', Math.max(0, g.stats.maxCombo)]]);
     }
     toolbox.instanceMatrix.needsUpdate = true; toolbox.visible = toolbox.count > 0;
@@ -556,6 +662,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   // Where something in the world is on screen, in CSS pixels (for the foreman's bubble).
   function screenOf(x, y, z) { const v = vp.set(x, y, z).project(camera), r = canvas.getBoundingClientRect(); return { x: ((v.x + 1) / 2) * r.width, y: ((1 - v.y) / 2) * r.height, on: v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1 }; }
   const kapHead = () => screenOf(kap.x, 2.25, kap.z);
+  const rivalHead = () => (rig && vsOn ? screenOf(rig.RX, rig.LIFT + (WELL.top + 1.75) * rig.S, rig.Z + 0.3) : { x: 0, y: 0, on: false });
 
   // ---------- the real things, as they load ----------
   function setEnv(env) {
@@ -582,7 +689,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   resize();
   applyTod('golden', null, 0, 1);
   return {
-    frame, event, resize, post, renderer, scene, setEnv, setPeople, setCrowd, kapHead, screenOf,
+    frame, event, resize, post, renderer, scene, setEnv, setPeople, setCrowd, kapHead, screenOf, rivalEvent, attack, setVersus, rivalHead,
     setHouseStyle(id) { site.setHouseStyle(id); },
     celebrate() { fx.confetti(0, WELL.top + 1, 1.2, 220); cheerT = 4; reactKapatas('victory'); if (!reduced) flashK = 0.2; },
     get cellPx() { return cellPx; }, get cine() { return cine; }, get busy() { return fx.busy; },

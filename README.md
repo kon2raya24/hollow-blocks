@@ -14,6 +14,7 @@
   - **↑** or **X** turns clockwise, and **Z** turns back.
   - **Space** hard drops, and **C** or **Shift** holds (*imbak*).
   - **P** pauses and **M** toggles sound.
+- **Half turn (option):** **V**. Every key can be changed in Settings.
 - **Phone:** tap to turn, drag sideways to move, drag down to drop gently, flick down to drop hard, and flick up to hold. There's a row of buttons too.
 - **Controller** (any gamepad the browser sees, PlayStation included): the d-pad or left stick moves and drops gently, **up** drops hard, **✕/A** turns, **○/B** turns back, **△/Y** or a shoulder button holds, **Options/Start** pauses. In the menus the d-pad moves between buttons, ✕ presses and ○ goes back.
 - **Rules:** a 7-piece bag, standard rotation with wall kicks, a ghost showing where the piece will land, and lock delay with move resets.
@@ -30,7 +31,17 @@
 - **Bagyo:** a storm, with rain, wind and lightning, and the flood pushes rows of wet, dripping mud up from below with a squelch, faster as you go, while brown water creeps over the site. Hold it off as long as you can.
 - **Karera:** two minutes, the most kita wins.
 - **Daily:** two minutes on the same pieces as everyone else today (by Manila date), with your best kept and a spoiler-free result to share.
+- **Laban (versus):** your well and a rival's, side by side on the site; the rival's scaffold stands on a raised deck next to yours, its name on a board on top. Clears send mud rows with one gap: 2 rows send 1, 3 send 2, a Bayanihan 4, a T-spin double 4 (single 2, triple 6), back-to-back adds 1, combos add more the longer they run, and a perfect clear sends 10. Incoming mud stacks up as sacks beside your well (amber while it waits, red once it's armed, after half a second) and comes up the next time a piece locks without a clear, at most eight rows at once; your own clears cancel it first. Play a quick match against **Baguhan**, **Bihasa** or **Kapatas**, or climb the **Liga ng Barangay**: six rivals (Totoy Bato, Aling Nena, Mang Berto, Bebang Bilis, Engr. Dado and Kapatas Rodel), each with a pace, a mistake rate, a style (a clean stacker, a Bayanihan builder, a speedster, a T-spinner) and their own trash talk. Each one you beat opens the next, and the ladder is saved.
+- **Pagsasanay (training):** Kapatas's lessons: T-spin single, double and triple, the 4-wide combo, and finesse. Each has a set board, an instruction card, a gold ghost showing where the piece should go, a retry (R), and a pass check. The lessons teach what the hard contracts need, and the Diskarte, Sunod-sunod and Tatlong T-spin cards link to them.
 - **Proyekto:** fifteen contracts across three barangays (San Roque, Malinta, Bagong Silang), each a job order from Kapatas with a goal and a twist: clear rows with only two holds, reach a floor against the clock, make T-spins, outlast the mud, clear a messy foundation in few pieces, earn ₱6,000 while a **lindol** (earthquake) slides the stack sideways every 30 seconds. Finishing earns a star, beating the par two or three; each contract opens the next, and 8 stars open the next barangay.
+
+## Replays and the ghost
+
+Every game is recorded as its seed and setup plus the input of each tick, stored as changes only and packed into a few kilobytes. Your best Deadline and Karera runs (per difficulty), your best Daily, and your last game are kept on the device. In Deadline and Karera, **Habulin ang multo** races your best run: a bar under the score shows you and the ghost, and how far ahead or behind you are. The replay viewer plays a run back at 1×, 2× or 4×, with pause; **Link** copies a URL whose hash is the replay (deflated and base64url), and opening that link plays it.
+
+## Settings
+
+Besides the graphics, sound, camera and ghost piece: how many next pieces show (1 to 6), DAS and ARR (by the difficulty unless you set them; ARR 0 goes straight to the wall), soft-drop speed, a 180° turn (V, with the SRS+ kicks), hold on or off, the finesse coach in every mode, and the ghost race. **Mga pindutan** remaps the keyboard (up to three keys per action) and the controller buttons, warns before taking a key another action uses, and resets to the defaults. Older saves carry over with the defaults filled in.
 
 ## Gamit (tools)
 
@@ -71,8 +82,14 @@ Tests (Node 20+): `node --test test/*.test.mjs`.
   - exact replays
   - every contract winnable: the bot plays each at a strong player's pace and must earn a star; the pars come from those runs, so three stars means matching it (Diskarte, Sunod-sunod and Tatlong T-spin need T-spins and combos the bot doesn't play, so their pars are set by hand) (`test/contracts.test.mjs`)
   - every tool, the toolboxes and the inventory, time limits, the lindol, rubble setups, each contract's goals and stars, the Daily seed, XP, ranks and medals (`test/modes.test.mjs`)
+  - versus: the mud table, cancelling, armed mud coming up with one gap per attack, the ladder, the rivals getting harder, and a whole match replaying identically from its seed and your inputs (`test/versus.test.mjs`)
+  - replays: Deadline, Karera and Daily runs (with rule options) replay to the exact final state and score, and the bytes and share text round-trip (`test/replay.test.mjs`)
+  - training: each lesson's solution, played key by key, passes its check and a wrong move fails it; the finesse minimums for a sample of placements (`test/training.test.mjs`)
+  - rule options: no options plays exactly as before; DAS, ARR, soft drop, hold off, the queue length, and the 180° turn with its kicks (`test/options.test.mjs`)
 - **The offline cache:** every module, three.js and the sounds are precached.
-- **Sanity floors:** from a bot (`src/bot.mjs`) that scores every placement with the classic El-Tetris weights.
+- **Sanity floors:** from a bot (`src/bot.mjs`) that scores every placement with the classic El-Tetris weights. For versus it also finds T-spins (soft drop, then a last turn into a three-corner slot) and, in the T-spinner style, keeps T-slots open; the rivals are this bot, paced and given a mistake rate (`src/versus.mjs`).
+
+**How v6 is built:** the rules stay pure. `src/versus.mjs` steps two games in lockstep and moves the mud; `src/replay.mjs` records, packs and plays back; `src/training.mjs` holds the lessons, a path finder for their solutions, and the finesse table (the fewest taps, holds and turns to each column and turn on an open board); `src/rival3d.mjs` builds the rival's scaffold, deck and mud sacks.
 
 The music is an original tune. Made by [Lemmuel Turaya](https://kon2raya.netlify.app).
 

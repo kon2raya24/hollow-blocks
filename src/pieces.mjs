@@ -59,3 +59,12 @@ const I = {
 };
 export const KICKS = { JLSTZ: {}, I: {} };
 for (const k of Object.keys(JLSTZ)) { KICKS.JLSTZ[k] = up(JLSTZ[k]); KICKS.I[k] = up(I[k]); }
+// Half turns (an option): the SRS+ 180 kicks (as in TETR.IO), the same table for every piece but the O.
+const HALF = {
+  '02': [[0, 0], [0, 1], [1, 1], [-1, 1], [1, 0], [-1, 0]],
+  '13': [[0, 0], [1, 0], [1, 2], [1, 1], [0, 2], [0, 1]],
+  '20': [[0, 0], [0, -1], [-1, -1], [1, -1], [-1, 0], [1, 0]],
+  '31': [[0, 0], [-1, 0], [-1, 2], [-1, 1], [0, 2], [0, 1]],
+};
+export const KICKS180 = { JLSTZ: {}, I: {} };
+for (const k of Object.keys(HALF)) { KICKS180.JLSTZ[k] = up(HALF[k]); KICKS180.I[k] = up(HALF[k]); }
