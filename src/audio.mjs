@@ -125,6 +125,16 @@ export function createAudio({ base = 'assets/sfx/' } = {}) {
           break;
         }
         case 'tspin': tone(400, 0.3, 'sawtooth', 0.03, 0, 2); break;
+        case 'tool':
+          if (e.tool === 'martilyo') { play('metal', 0.5, 0.7, 0.42); play('mining', 0.8, 0.8, 0.45); tone(70, 0.25, 'sine', 0.12, 0.45, 0.5); hiss(0.4, 300, 0.08, 0, 'lowpass', 1200); }
+          else if (e.tool === 'semento') { hiss(0.9, 500, 0.12, 0.2, 'lowpass', 160); play('soft', 0.6, 0.6, 0.35); play('soft', 0.5, 0.75, 0.7); }
+          else if (e.tool === 'kreyn') { for (let k = 0; k < 6; k++) play('tin', 0.25, 1.4 + k * 0.05, k * 0.08); tone(220, 0.6, 'sawtooth', 0.02, 0.1, 1.5); play('metal', 0.4, 1.1, 0.6); }
+          else if (e.tool === 'pison') { hiss(1.1, 120, 0.2, 0, 'lowpass', 90); tone(48, 1.1, 'sawtooth', 0.05, 0, 0.8); for (let k = 0; k < 5; k++) play('mining', 0.35, 0.7, 0.15 + k * 0.17); }
+          else { play('bell', 0.4, 1.2); [79, 76, 72, 67].forEach((n, i) => tone(NOTE(n), 0.3, 'triangle', 0.05, 0.15 + i * 0.22)); for (let k = 0; k < 6; k++) tone(1800, 0.03, 'square', 0.02, 0.9 + k * (0.18 + k * 0.05)); }
+          break;
+        case 'toolEarned': play('glass', 0.4, 1.4); [72, 79, 84].forEach((n, i) => tone(NOTE(n), 0.12, 'triangle', 0.05, i * 0.07)); break;
+        case 'lindol': hiss(1.6, 90, 0.35, 0, 'lowpass', 40); tone(36, 1.4, 'sawtooth', 0.07, 0, 0.7); for (let k = 0; k < 4; k++) play('mining', 0.3, 0.6, 0.2 + k * 0.25); break;
+        case 'perfect': [72, 76, 79, 84, 88].forEach((n, i) => tone(NOTE(n), 0.2, 'square', 0.04, i * 0.08)); play('bell', 0.35, 1.5, 0.3); break;
         case 'ceremony': { [60, 64, 67, 72, 67, 72, 76, 79].forEach((n, i) => { tone(NOTE(n), 0.3, 'square', 0.025, 0.2 + i * 0.13); tone(NOTE(n - 12), 0.3, 'triangle', 0.04, 0.2 + i * 0.13); }); hiss(2.5, 700, 0.1, 0.1, 'bandpass', 900); play('bell', 0.4, 1, 0.2); play('bell', 0.3, 1.5, 1.1); break; }
         case 'levelUp': [67, 71, 74, 79].forEach((n, i) => tone(NOTE(n), 0.14, 'square', 0.045, i * 0.09)); play('bell', 0.3, 1.3, 0.2); break;
         case 'rise': tone(60, 0.5, 'sawtooth', 0.06, 0, 0.7); hiss(0.4, 300, 0.1, 0, 'lowpass'); play('soft', 0.8, 0.7); break;
