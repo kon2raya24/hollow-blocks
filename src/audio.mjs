@@ -19,19 +19,29 @@ const TUNE = [
 
 export function createAudio({ base = 'assets/sfx/' } = {}) {
   let ctx = null, master = null, music = null, sfx = null, noise = null, muted = false, amb = null;
-  const buf = {}, mix = { music: 1, sfx: 1 };
+  const buf = {}, norm = {}, mix = { music: 1, sfx: 1 };
+  // each recording brought to the same loudness (RMS over its loud part), and never past 0.9 at its peak
+  function normOf(b) {
+    const d = b.getChannelData(0); let peak = 0, sum = 0, n = 0;
+    for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > peak) peak = v; }
+    for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > peak * 0.1) { sum += v * v; n++; } }
+    const rms = n ? Math.sqrt(sum / n) : peak;
+    return Math.min(0.9 / Math.max(peak, 1e-4), 0.22 / Math.max(rms, 1e-4));
+  }
   let step = 0, nextAt = 0, playing = false, tempo = 120;
 
   function start() {
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
     try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
-    master = ctx.createGain(); master.gain.value = muted ? 0 : 0.7; master.connect(ctx.destination);
+    // everything goes through a gentle limiter, so a Bayanihan's pile-up of sounds never clips
+    const lim = ctx.createDynamicsCompressor(); lim.threshold.value = -9; lim.knee.value = 6; lim.ratio.value = 10; lim.attack.value = 0.003; lim.release.value = 0.2; lim.connect(ctx.destination);
+    master = ctx.createGain(); master.gain.value = muted ? 0 : 0.7; master.connect(lim);
     music = ctx.createGain(); music.gain.value = 0; music.connect(master);
     sfx = ctx.createGain(); sfx.gain.value = mix.sfx; sfx.connect(master);
     noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     setInterval(schedule, 50);
-    for (const k of SAMPLES) for (let i = 0; i < 3; i++) fetch(`${base}${k}${i}.mp3`).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject())).then((a) => ctx.decodeAudioData(a)).then((b) => { buf[k + i] = b; }).catch(() => { /* synth only */ });
+    for (const k of SAMPLES) for (let i = 0; i < 3; i++) fetch(`${base}${k}${i}.mp3`).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject())).then((a) => ctx.decodeAudioData(a)).then((b) => { buf[k + i] = b; norm[k + i] = normOf(b); }).catch(() => { /* synth only */ });
     // the weather beds: rain (and wind) for a bagyo, cicadas at noon; each a filtered noise loop
     const bed = (type, f, q) => { const src = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), g = ctx.createGain(); src.buffer = noise; src.loop = true; fl.type = type; fl.frequency.value = f; fl.Q.value = q; g.gain.value = 0; src.connect(fl).connect(g).connect(sfx); src.start(); return { g, fl }; };
     amb = { rain: bed('highpass', 1800, 0.4), wind: bed('lowpass', 420, 1), cicada: bed('bandpass', 5200, 12) };
@@ -42,8 +52,9 @@ export function createAudio({ base = 'assets/sfx/' } = {}) {
     const takes = [0, 1, 2].map((i) => buf[name + i]).filter(Boolean);
     if (!takes.length) return false;
     const s = ctx.createBufferSource(), g = ctx.createGain();
-    s.buffer = takes[Math.floor(Math.random() * takes.length)]; s.playbackRate.value = rate * (1 + (Math.random() * 2 - 1) * 0.07);
-    g.gain.value = gain; s.connect(g).connect(sfx); s.start(ctx.currentTime + when);
+    const pickI = Math.floor(Math.random() * takes.length), key = [0, 1, 2].map((i) => name + i).filter((k) => buf[k])[pickI];
+    s.buffer = buf[key]; s.playbackRate.value = rate * (1 + (Math.random() * 2 - 1) * 0.07);
+    g.gain.value = gain * (norm[key] || 1); s.connect(g).connect(sfx); s.start(ctx.currentTime + when);
     return true;
   }
   function impact(piece, gain) { const m = MAT[piece] || MAT.O; let any = false; for (const [n, r, g] of m) any = play(n, g * gain, r) || any; return any; }
@@ -90,7 +101,7 @@ export function createAudio({ base = 'assets/sfx/' } = {}) {
       if (!ctx) return;
       const live = on && g && (g.phase === 'play' || g.phase === 'clear' || g.phase === 'ready');
       if (live !== playing) { playing = live; if (live) nextAt = ctx.currentTime + 0.05; }
-      music.gain.setTargetAtTime(live ? mix.music : 0, ctx.currentTime, 0.2);
+      music.gain.setTargetAtTime(live ? mix.music * 1.4 : 0, ctx.currentTime, 0.2); // the tune sits under the effects
       if (amb) { const storm = g && g.mode === 'bagyo' && live, noon = g && g.mode === 'deadline' && live; amb.rain.g.gain.setTargetAtTime(storm ? 0.05 : 0, ctx.currentTime, 0.6); amb.wind.g.gain.setTargetAtTime(storm ? 0.06 + Math.sin(ctx.currentTime * 0.4) * 0.03 : 0, ctx.currentTime, 0.8); amb.cicada.g.gain.setTargetAtTime(noon ? 0.012 * (0.6 + 0.4 * Math.sin(ctx.currentTime * 7)) : 0, ctx.currentTime, 0.1); }
       tempo = Math.min(200, 112 + ((g && g.level) || 1) * 5 + (g && g.mode === 'deadline' ? 20 : 0));
     },
@@ -109,10 +120,12 @@ export function createAudio({ base = 'assets/sfx/' } = {}) {
           const run = e.n === 4 ? [0, 4, 7, 12, 16, 19, 24] : [0, 4, 7, 12].slice(0, e.n + 1);
           run.forEach((k, i) => tone(NOTE(67 + k + Math.min(8, e.combo)), 0.14, 'square', 0.04, i * 0.06));
           if (e.spin) tone(400, 0.3, 'sawtooth', 0.03, 0, 2);
+          if (e.b2b) { tone(900, 0.35, 'sine', 0.04, 0.05, 2.5); play('metal', 0.35, 1.8, 0.05); play('glass', 0.3, 1.5, 0.12); hiss(0.3, 6000, 0.05, 0.05, 'highpass'); } // the spark streak
           if (e.n === 4) [55, 60, 64, 67].forEach((n, i) => { tone(NOTE(n), 0.5, 'square', 0.03, 0.45 + i * 0.03); tone(NOTE(n - 12), 0.5, 'triangle', 0.05, 0.45); });
           break;
         }
         case 'tspin': tone(400, 0.3, 'sawtooth', 0.03, 0, 2); break;
+        case 'ceremony': { [60, 64, 67, 72, 67, 72, 76, 79].forEach((n, i) => { tone(NOTE(n), 0.3, 'square', 0.025, 0.2 + i * 0.13); tone(NOTE(n - 12), 0.3, 'triangle', 0.04, 0.2 + i * 0.13); }); hiss(2.5, 700, 0.1, 0.1, 'bandpass', 900); play('bell', 0.4, 1, 0.2); play('bell', 0.3, 1.5, 1.1); break; }
         case 'levelUp': [67, 71, 74, 79].forEach((n, i) => tone(NOTE(n), 0.14, 'square', 0.045, i * 0.09)); play('bell', 0.3, 1.3, 0.2); break;
         case 'rise': tone(60, 0.5, 'sawtooth', 0.06, 0, 0.7); hiss(0.4, 300, 0.1, 0, 'lowpass'); play('soft', 0.8, 0.7); break;
         case 'gameover': hiss(1.6, 600, 0.26, 0, 'lowpass', 60); for (let k = 0; k < 6; k++) play(k % 2 ? 'mining' : 'heavy', 0.45, 0.6 + Math.random() * 0.3, k * 0.09); [67, 64, 60, 55].forEach((n, i) => tone(NOTE(n), 0.4, 'triangle', 0.07, 0.2 + i * 0.28)); break;

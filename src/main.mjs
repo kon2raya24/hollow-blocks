@@ -28,13 +28,18 @@ const SAYS = {
   go: ['Tara, trabaho na!', 'Buhos na tayo!', 'Simulan na natin!'],
   one: ['Ayos!', 'Sige lang!', 'Isa pa!'],
   four: ['BAYANIHAN! Galing!', 'Ganyan ang tulungan!', 'Buhat-buhat!'],
-  tspin: ['Galing ng diskarte!', 'T-spin! Pang-engineer!'],
+  tspin: ['Galing ng diskarte!', 'T-spin! Pang-engineer!', 'Ikot-pasok! Ang husay!', 'Parang engineer ka, ah!'],
   combo: ['Tuloy-tuloy!', 'Wag tumigil!'],
   level: ['Bagong palapag!', 'Taas pa!'],
   high: ['Ingat! Ang taas na!', 'Babagsak yan!', 'Linisin muna!'],
   rise: ['Tumataas ang baha!', 'Bilisan, bagyo!'],
   over: ['Gumuho! Overtime tayo bukas.', 'Ay, sayang ang semento!'],
   done: ['Tapos sa oras! Libre kita ng merienda!', 'Pasok sa deadline!'],
+  b2b: ['Sunod-sunod! Ang galing!', 'Isa pang ganyan!', 'Walang tigil, ha!'],
+  brink: ['Konti na lang, guguho na!', 'Delikado! Ibaba mo na!', 'Susmaryosep, ang taas!'],
+  drought: ['Nasaan na ang kawayan?!', 'Wala pang kawayan. Diskarte muna!', 'Matagal pa ang kawayan, ha.'],
+  relief: ['Ayan na ang kawayan!', 'Sa wakas, kawayan!'],
+  ceremony: ['Tapos ang bahay! Salamat sa lahat!', 'Bahay na! Kain tayo mamaya!'],
 };
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const touch = matchMedia('(pointer: coarse)').matches;
@@ -81,7 +86,7 @@ function start() {
   if (!data.safety && !AUTOPLAY) { mode = 'safety'; show('safety'); return; }
   game = createGame({ seed: seed(), mode: data.mode, difficulty: data.difficulty });
   if (R) R.reset();
-  mode = 'play'; clearInput(); show(null); hudKey = '';
+  mode = 'play'; clearInput(); show(null); hudKey = ''; sinceI = 0;
   big(MODES[data.mode].name, data.mode === 'deadline' ? '40 hanay, bilisan!' : data.mode === 'bagyo' ? 'Tumataas ang baha!' : 'Buuin ang bahay!', 1.6);
   hint('move', touch ? 'I-tap para iikot, i-drag pakaliwa o pakanan, i-flick pababa para ibagsak. May mga button din sa ibaba.' : '← → galaw · ↑ o X ikot · Z pabalik · ↓ dahan-dahan · Space bagsak · C o Shift imbak · may controller din');
 }
@@ -102,7 +107,7 @@ function finish(done) {
     $('results-best').textContent = isBest ? 'Bagong best! New best!' : b ? `Best: ${g.mode === 'deadline' ? clock(b) : peso(b)}` : '';
     $('results-best').className = isBest ? 'new' : 'muted';
     const stat = (label, v) => `<div><span>${label}</span><b>${v}</b></div>`;
-    $('results-stats').innerHTML = stat('Hanay', g.lines) + stat('Palapag', g.level) + stat('Oras', clock(g.elapsed)) + stat('Bayanihan', g.stats.bayanihan) + stat('T-spin', g.stats.tspins) + stat('Combo', Math.max(0, g.stats.maxCombo));
+    $('results-stats').innerHTML = stat('Hanay', g.lines) + stat('Naitayo', `${1 + Math.floor(g.lines / 10)} palapag`) + stat('Oras', clock(g.elapsed)) + stat('Bayanihan', g.stats.bayanihan) + stat('T-spin', g.stats.tspins) + stat('Combo', Math.max(0, g.stats.maxCombo));
     $('results-tip').textContent = `"${pick(TIPS)}" — Kapatas`;
     show('results');
   }, done ? 1800 : 1600);
@@ -126,7 +131,7 @@ function big(title, sub = '', secs = 1.4) {
   const el = $('big'); el.querySelector('b').textContent = title; el.querySelector('span').textContent = sub;
   el.hidden = false; el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); bigT = secs;
 }
-let bubbleT = 0, sayCool = 0;
+let bubbleT = 0, sayCool = 0, sinceI = 0;
 function say(k, force = false) {
   if (!view) { if (R) R.say(k); return; }
   if (!force && sayCool > 0) return;
@@ -141,11 +146,15 @@ function onEvent(e) {
     case 'go': say('go', true); break;
     case 'lines':
       if (e.n === 4) { buzz([30, 30, 60]); big('BAYANIHAN!', e.b2b ? 'Sunod-sunod! ×1.5' : 'Tulong-tulong!', 1.6); say('four', true); }
-      else { buzz(15); if (e.spin) say('tspin', true); else if (e.combo >= 2) say('combo'); else if (Math.random() < 0.3) say('one'); }
+      else { buzz(15); if (e.spin) say('tspin', true); else if (e.b2b) say('b2b', true); else if (e.combo >= 2) say('combo'); else if (Math.random() < 0.3) say('one'); }
       if (e.n === 1) hint('bayanihan', 'Tip: apat na hanay nang sabay ay BAYANIHAN, ang pinakamalaking kita!');
       break;
     case 'tspin': say('tspin', true); break;
-    case 'levelUp': big(`Palapag ${e.level}!`, 'Bagong palapag · New floor', 1.5); say('level', true); break;
+    case 'spawn':
+      if (e.piece === 'I') { if (sinceI >= 12) say('relief', true); sinceI = 0; }
+      else if (++sinceI === 12) say('drought', true);
+      break;
+    case 'levelUp': if (!(view && game.mode === 'bahay' && (1 + Math.floor(game.lines / 10)) % 5 === 0)) { big(`Palapag ${e.level}!`, 'Bagong palapag · New floor', 1.5); say('level', true); } break;
     case 'rise': if (Math.random() < 0.35) say('rise'); hint('bagyo', 'Tumataas ang baha mula sa ilalim! Punuin ang butas para matanggal ang putik.'); break;
     case 'hardDrop': buzz(10); break;
     case 'gameover': say('over', true); finish(false); break;
@@ -325,14 +334,14 @@ labels();
 let hudKey = '';
 function hud(g) {
   const best = data.best[bestKey()] || 0;
-  const k = `${g.score}|${g.level}|${g.lines}|${g.mode === 'deadline' ? Math.floor(g.elapsed / 6) : best}`;
+  const k = `${g.score}|${g.level}|${g.lines}|${g.mode === 'deadline' ? Math.floor(g.elapsed / 6) : best}|${g.rise ? Math.ceil(g.rise.t / 60) : ''}`;
   if (k === hudKey) return;
   const bumped = hudKey && +hudKey.split('|')[0] !== g.score;
   hudKey = k;
   $('h-score').querySelector('b').textContent = peso(g.score);
   if (bumped) { const el = $('h-score'); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
   $('h-mode').querySelector('b').textContent = g.modeDef.name.toUpperCase();
-  $('h-mode').querySelector('em').textContent = g.mode === 'deadline' ? `${Math.max(0, 40 - g.lines)} hanay pa` : `Palapag ${g.level} · ${g.lines} hanay`;
+  $('h-mode').querySelector('em').textContent = g.mode === 'deadline' ? `${Math.max(0, 40 - g.lines)} hanay pa` : `Palapag ${g.level} · ${g.lines} hanay${g.rise && view && view.debug.compact ? ` · baha ${Math.ceil(g.rise.t / 60)}s` : ''}`;
   $('h-best').querySelector('small').textContent = g.mode === 'deadline' ? 'Oras' : 'Best';
   $('h-best').querySelector('b').textContent = g.mode === 'deadline' ? clock(g.elapsed) : peso(Math.max(best, g.score));
 }
@@ -357,7 +366,7 @@ function frame(now) {
     for (const e of step(game, input, dt * k)) onEvent(e);
     hud(game);
     let top = 99; for (let i = 0; i < game.board.length; i++) if (game.board[i]) { top = Math.floor(i / 10); break; }
-    highCool -= dt; if (top < 7 && game.phase === 'play' && highCool <= 0) { highCool = 9; say('high'); }
+    highCool -= dt; if (top < 7 && game.phase === 'play' && highCool <= 0) { highCool = 9; say(top < 5 ? 'brink' : 'high', top < 5); }
   } else if (!game) {
     if (demo.phase === 'over' || demo.elapsed > 60 * 150) demo = newDemo();
     for (const e of step(demo, bot(demo, { pace: 5 }), dt)) { if (view) view.event(e, demo); else R.event(e, demo); }
@@ -365,10 +374,10 @@ function frame(now) {
   const g = game || demo;
   const vmode = mode === 'play' ? 'play' : mode === 'pause' ? 'pause' : mode === 'results' ? 'results' : mode === 'safety' ? 'safety' : 'title';
   if (view) {
-    view.frame(g, dt, { mode: vmode, reduced: reduced(), cine: data.opt.cine, ghost: data.opt.ghost, onThunder: () => A.thunder() });
+    view.frame(g, dt, { mode: vmode, reduced: reduced(), cine: data.opt.cine, ghost: data.opt.ghost, onThunder: () => A.thunder(), onCeremony: (n) => { big('BAHAY NA!', `${n} palapag · Salamat, bayanihan!`, 2.4); say('ceremony', true); A.event({ type: 'ceremony' }); } });
     // Kapatas's bubble follows his head
     bubbleT -= dt; sayCool -= dt;
-    const el = $('bubble'), p = view.kapHead(), on = bubbleT > 0 && (mode === 'play' || mode === 'results') && p.on && !view.cine;
+    const el = $('bubble'), p = view.kapHead(), on = bubbleT > 0 && mode === 'play' && p.on && !view.cine;
     el.hidden = !on;
     if (on) { const hw = el.offsetWidth / 2 + 6; p.x = Math.max(hw, Math.min(innerWidth - hw, p.x)); el.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) translate(-50%, -100%)`; el.style.opacity = String(Math.min(1, bubbleT / 0.3)); }
     bigT -= dt; if (bigT <= 0) $('big').hidden = true;
@@ -414,7 +423,7 @@ async function boot() {
   if (TEST) {
     // fast-forward for soak tests: n ticks of the bot, drawing a frame every 20
     const fast = (n) => { for (let k = 0; k < n; k++) { const g = game; if (!g || mode !== 'play') break; for (const e of step(g, bot(g, { pace: 1 }), 1 / 60)) onEvent(e); if (view && k % 20 === 19) view.frame(g, 1 / 3, { mode: 'play', reduced: reduced(), cine: data.opt.cine, ghost: true }); } return game && game.lines; };
-    window.__hb = { fast, get game() { return game; }, get mode() { return mode; }, get demo() { return demo; }, start, get view() { return view; }, pause, resume, openSettings: () => openSettings(mode === 'pause' ? 'pause' : 'title'), data };
+    window.__hb = { fast, A, get game() { return game; }, get mode() { return mode; }, get demo() { return demo; }, start, get view() { return view; }, pause, resume, openSettings: () => openSettings(mode === 'pause' ? 'pause' : 'title'), data };
     if (Q.get('difficulty')) data.difficulty = Q.get('difficulty');
     if (Q.get('mode')) data.mode = Q.get('mode');
     if (Q.get('go') === '1') { data.safety = true; start(); }

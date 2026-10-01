@@ -124,6 +124,13 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     im.setColorAt(im.count, typeof tint === 'number' ? cW.setScalar(tint) : tint);
     im.count++;
   }
+  // Bagyo: wet mud runs down the face of the mud rows, and brown floodwater creeps over the site
+  const dripM = new THREE.MeshStandardMaterial({ color: '#3a2616', roughness: 0.08, metalness: 0, envMapIntensity: 1.6 });
+  const dripGeo = new THREE.SphereGeometry(0.05, 10, 8); dripGeo.translate(0, -0.05, 0);
+  const drips = new THREE.InstancedMesh(dripGeo, dripM, 160); drips.count = 0; drips.frustumCulled = false; drips.castShadow = false; scene.add(drips);
+  const floodM = new THREE.MeshStandardMaterial({ color: '#4a3a26', roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.88, envMapIntensity: 1.4 });
+  const flood = new THREE.Mesh(new THREE.PlaneGeometry(120, 60, 1, 1), floodM); flood.rotation.x = -Math.PI / 2; flood.position.set(0, -0.2, -6); flood.visible = false; flood.receiveShadow = true; scene.add(flood);
+  let floodY = -0.2;
   const keyOf = (type, rot) => (type === 'I' ? (rot % 2 ? 'kawayanV' : 'kawayan') : KEYS[TYPE_KEY[type]]);
 
   // ---------- Kapatas ----------
@@ -142,7 +149,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   const bolt = { mesh: null, t: 0 };
   let todNow = { ...TOD.golden }, todKey = 'golden', todTo = null, todK = 0, stormOn = false, hazeOn = false;
 
-  function resetState() { orient = new Uint8Array(COLS * ROWS); pending = null; collapsed = false; riseT = 0; cine = null; fx.clear(); }
+  function resetState() { orient = new Uint8Array(COLS * ROWS); pending = null; collapsed = false; riseT = 0; cine = null; fx.clear(); site.resetBunting(); }
 
   // ---------- the camera ----------
   const cam = { pos: new THREE.Vector3(0, 6, 30), look: new THREE.Vector3(0, 5, 0), fov: 30, mode: 'title', blend: 1, from: null };
@@ -153,14 +160,14 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     const r = canvas.getBoundingClientRect(), W = Math.max(1, r.width), H = Math.max(1, r.height), aspect = W / H;
     compact = aspect < 0.8;
     layout = site.layoutBoards(compact);
-    kap.x = compact ? -3.55 : -4.35; kap.z = compact ? 2.4 : 1.4;
+    kap.x = compact ? -3.3 : -4.35; kap.z = compact ? 2.6 : 1.4;
     const fov = compact ? 34 : 30, t = Math.tan((fov * Math.PI) / 360);
-    const x0 = layout.x0 - 0.15, x1 = layout.x1 + 0.15, y0 = compact ? -0.2 : -0.35, y1 = WELL.top + 0.35;
-    const hf = Math.max(0.3, 1 - (insets.top + insets.bottom) / H), wf = compact ? 0.93 : 0.97;
+    const x0 = layout.x0 - 0.15, x1 = layout.x1 + 0.15, y0 = compact ? 0.05 : -0.35, y1 = layout.yTop;
+    const hf = Math.max(0.3, 1 - (insets.top + insets.bottom) / H) * 0.98, wf = compact ? 0.96 : 0.97;
     const frameH = Math.max((y1 - y0) / hf, (x1 - x0) / (aspect * wf));
     const D = frameH / (2 * t);
     const midY = (y0 + y1) / 2 + ((insets.top - insets.bottom) / H / 2) * frameH;
-    const yaw = angled ? (compact ? 0 : 0.1) : 0, pitch = angled ? 0.1 : 0.06;
+    const yaw = angled ? (compact ? 0 : 0.1) : 0, pitch = compact ? 0.04 : angled ? 0.1 : 0.06;
     play.look.set((x0 + x1) / 2, midY, 0);
     play.pos.set(play.look.x + Math.sin(yaw) * Math.cos(pitch) * D, midY + Math.sin(pitch) * D, Math.cos(yaw) * Math.cos(pitch) * D);
     play.fov = fov;
@@ -179,7 +186,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   const shots = {
     title: (t) => ({ pos: [Math.sin(t * 0.045) * 9 + 6, 7.5 + Math.sin(t * 0.07) * 1.2, 27 + Math.cos(t * 0.05) * 2], look: [1.2, 4.6, -2], fov: 38 }),
     establish: () => ({ pos: [15, 13, 24], look: [2, 4.2, -3], fov: 42 }),
-    results: (t) => ({ pos: [kap.x + 5.2 + Math.sin(t * 0.1) * 0.3, 2.6, kap.z + 7.5], look: [kap.x + 1.5, 1.8, kap.z - 1], fov: 34 }),
+    results: (t) => { const h = site.house.group.position, top = Math.max(6, site.house.top()), wide = camera.aspect > 1.2; return { pos: [h.x + 3 + Math.sin(t * 0.1) * 0.6, top * 0.42 + 1.2, h.z + 21 + top * 0.7], look: [h.x - (wide ? 5.5 : 0.5), top * 0.52, h.z], fov: wide ? 44 : 56 }; },
     bayanihan: (k) => ({ pos: [lerp(-8.6, -6.8, k), 1.35, 13.6], look: [lerp(-2.6, -0.4, k), 3.35, 2.6], fov: 46 }),
     house: (k) => ({ pos: [lerp(8.6, 10.2, k), 4.2 + k * 1.6, 13.5], look: [site.house.group.position.x - 0.5, site.house.top() + 0.5, site.house.group.position.z], fov: 38 }),
     pause: () => ({ pos: [play.pos.x - 2.5, play.pos.y - 1.2, play.pos.z - 4], look: [play.look.x - 0.4, play.look.y - 0.5, 0], fov: play.fov }),
@@ -282,6 +289,11 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         const word = e.spin ? (e.spin === 'mini' ? 'MINI T-SPIN' : `T-SPIN ${['', 'SINGLE', 'DOUBLE', 'TRIPLE'][e.n]}!`) : WORDS[e.n];
         if (e.n < 4) fx.callout(word, 0, midY + 0.35, 1.2, { color: e.spin ? 'pink' : 'white', height: e.spin ? 1.1 : 0.92, life: 1.4 });
         fx.callout(`+₱${e.points.toLocaleString('en-US')}`, 0, midY - 0.5, 1.2, { color: 'green', height: 0.62, life: 1.3, delay: 0.08 });
+        if (e.b2b) {
+          // back to back: a streak of sparks along the rows, gold
+          for (const r of e.rows) for (let k = 0; k < 26; k++) { const f = k / 25; fx.spark(WELL.x0 + f * 5, cy(r) + rnd(-0.15, 0.15), 0.35, k % 3 ? '#ffd27a' : '#ffffff', { vx: rnd(2, 6), vy: rnd(-0.5, 2.5), vz: rnd(0.5, 2), size: rnd(0.05, 0.09), grow: 0, life: rnd(0.3, 0.6), a: 1, drag: 1.5, grav: 0.6 }); }
+          fx.bar(0, midY, 0.4, 5.6, CS * 0.35 * e.rows.length, '#ffc040', 0.35, { grow: 2.4 });
+        }
         if (e.b2b) fx.callout('SUNOD-SUNOD ×1.5', 0, midY - 1.2, 1.2, { color: 'blue', height: 0.52, life: 1.3, delay: 0.16 });
         if (e.combo > 0) fx.callout(`TULOY-TULOY ×${e.combo}`, 0, midY + 1.3, 1.2, { color: 'orange', height: 0.56, life: 1.2, delay: 0.12 });
         if (!reduced) { kickV -= 0.03 + e.n * 0.018; flashK = Math.max(flashK, e.n === 4 ? 0.28 : e.spin ? 0.14 : 0); }
@@ -301,12 +313,14 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         const hx = site.house.group.position.x, hz = site.house.group.position.z, hy = site.house.top();
         for (let k = 0; k < 18; k++) fx.puff(hx + rnd(-4, 4), hy + rnd(-0.5, 0.5), hz + rnd(-2.5, 3), '#d8d0c0', { size: rnd(0.8, 1.6), vy: rnd(0.2, 0.8), life: rnd(1.2, 2), a: 0.35 });
         fx.confetti(hx, hy + 3, hz + 2, 60);
+        // every fifth floor in Bahay, the house is finished: the neighbours cheer and banderitas go up
+        if (g.mode === 'bahay' && (1 + Math.floor(g.lines / 10)) % 5 === 0) { site.raiseBunting(); cheerT = 4.5; reactKapatas('victory'); fx.confetti(0, WELL.top + 2, 1, 200); fx.confetti(hx, hy + 4, hz + 2, 120); if (o0.onCeremony) o0.onCeremony(1 + Math.floor(g.lines / 10)); }
         break;
       }
       case 'rise': {
         riseT = 1;
-        for (let x = 0; x < COLS; x++) fx.puff(cx(x), BASE_Y + 0.1, 0.4, '#6a5038', { size: rnd(0.3, 0.6), vy: rnd(0.4, 1.4), vz: rnd(0.4, 1.4), life: 0.9, a: 0.6 });
-        if (!reduced) kickV -= 0.02;
+        for (let x = 0; x < COLS; x++) { fx.puff(cx(x), BASE_Y + 0.1, 0.4, '#6a5038', { size: rnd(0.3, 0.6), vy: rnd(0.4, 1.4), vz: rnd(0.4, 1.4), life: 0.9, a: 0.6 }); for (let k = 0; k < 2; k++) fx.chunk('putik', cx(x) + rnd(-0.2, 0.2), BASE_Y + 0.2, 0.3, rnd(-1.2, 1.2), rnd(1.5, 3.5), rnd(0.5, 2), rnd(0.03, 0.06)); }
+        if (!reduced) kickV -= 0.045;
         break;
       }
       case 'gameover': {
@@ -329,12 +343,13 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
 
   // ---------- each frame ----------
   const opts = { cine: true, live: false };
+  let o0 = {};
   let clock = 0, danger = false;
   function frame(g, dt, o = {}) {
     dt = clamp(dt || 0, 0, 0.1);
     clock += dt;
     const t = clock;
-    reduced = !!o.reduced; opts.cine = o.cine !== false; opts.live = o.mode === 'play';
+    reduced = !!o.reduced; opts.cine = o.cine !== false; opts.live = o.mode === 'play'; o0 = o;
     if (g !== lastGame) { lastGame = g; resetState(); }
     // time of day and weather
     const [ta, tb, tk] = todFor(g, o.mode);
@@ -372,11 +387,16 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     const fp = site.house.flag.geometry.attributes.position;
     if (site.house.flag.parent && site.house.flag.parent.parent.visible) { for (let i = 0; i < fp.count; i++) { const x = fp.getX(i) + 0.6; fp.setZ(i, Math.sin(x * 5 - t * (4 + wind * 6)) * 0.06 * x); } fp.needsUpdate = true; }
     site.drum.rotation.y += dt * 1.2; // the mixer turns
+    // the flood: higher the more mud is in the well
+    let mud = 0; if (g && g.mode === 'bagyo') for (let y = ROWS - 1; y >= 0; y--) { if (g.board[y * COLS] === 8 || g.board[y * COLS + 1] === 8 || g.board[y * COLS + 2] === 8) mud++; else break; }
+    flood.visible = !!g && g.mode === 'bagyo';
+    floodY = lerp(floodY, -0.17 + Math.min(8, mud) * 0.028 + Math.sin(t * 1.3) * 0.006, Math.min(1, dt * 2)); flood.position.y = floodY;
     site.pulley.rotation.z -= dt * (g && g.phase === 'play' ? 2 : 0.4);
 
     // ---------- blocks ----------
     for (const im of Object.values(blocks)) im.count = 0;
     ghost.count = 0;
+    drips.visible = false;
     riseT = Math.max(0, riseT - dt / 0.16);
     spawnT = Math.max(0, spawnT - dt / 0.1); rotT = Math.max(0, rotT - dt / 0.09); holdT = Math.max(0, holdT - dt / 0.2);
     if (g && !collapsed) {
@@ -395,6 +415,17 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
           put(key, cx(x), Y, 0, 1, dangerK > 0.05 && y < HIDDEN + 6 ? dangerK * 0.12 * (0.5 + 0.5 * Math.sin(t * 8)) : 0, tint);
         }
       }
+      // the mud runs: a couple of drops sliding down the face of each mud cell
+      drips.count = 0;
+      if (g.mode === 'bagyo') for (let y = HIDDEN; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+        if (g.board[y * COLS + x] !== 8 || (clearing && clearing.includes(y)) || drips.count >= 158) continue;
+        for (let k = 0; k < 2; k++) {
+          const h = ((x * 73 + y * 31 + k * 17) % 97) / 97, ph = (t * (0.18 + h * 0.2) + h) % 1;
+          const X = cx(x) + (h - 0.5) * CS * 0.7, Y = cy(y) + riseOff + CS * 0.42 - ph * CS * 0.95;
+          m4.compose(vp.set(X, Y, CS * 0.45), q0, vs.set(1, 1 + ph * 2.6, 0.55)); drips.setMatrixAt(drips.count++, m4);
+        }
+      }
+      drips.instanceMatrix.needsUpdate = true; drips.visible = drips.count > 0;
       if (g.cur && g.phase === 'play') {
         const cur = g.cur, key = keyOf(cur.type, cur.rot);
         const lk = g.lockT > 0 ? g.lockT / g.diff.lock : 0;
@@ -416,12 +447,13 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       const mini = (type, x, y, s, tint = 1, glow = 0) => {
         const cs = SHAPES[type][0], xs = cs.map((c) => c[0]), ys = cs.map((c) => c[1]);
         const mx = (Math.min(...xs) + Math.max(...xs)) / 2, my = (Math.min(...ys) + Math.max(...ys)) / 2;
-        for (const [a, b] of cs) put(keyOf(type, 0), x + (a - mx) * CS * s, y - (b - my) * CS * s, 0.42, s, glow, tint);
+        for (const [a, b] of cs) put(keyOf(type, 0), x + (a - mx) * CS * s, y - (b - my) * CS * s, compact ? 0.8 : 0.42, s, glow, tint);
       };
-      const hs = compact ? 0.5 : 0.72;
+      const hs = compact ? 0.48 : 0.72;
       if (g.hold) mini(g.hold, hb.cx, hb.cy - hb.h * 0.08, hs * (1 + holdT * 0.15), g.holdUsed ? 0.4 : 1, holdT * 0.4);
       const slots = g.queue.slice(0, 5), top0 = nb.cy + nb.h / 2 - nb.h * 0.22;
-      slots.forEach((type, i) => mini(type, nb.cx, top0 - (i === 0 ? 0 : nb.h * 0.08 + i * nb.h * 0.148), (i === 0 ? hs : hs * 0.78) * (i === 0 ? 1 + spawnT * 0.08 : 1), i === 0 ? 1 : 0.88, i === 0 ? 0.1 : 0));
+      if (nb.row) slots.forEach((type, i) => mini(type, nb.cx - nb.w * 0.36 + (i === 0 ? 0 : 0.75 + (i - 1) * 0.6), nb.cy - nb.h * 0.08, (i === 0 ? 0.42 : 0.27) * (i === 0 ? 1 + spawnT * 0.08 : 1), i === 0 ? 1 : 0.88, i === 0 ? 0.1 : 0));
+      else slots.forEach((type, i) => mini(type, nb.cx, top0 - (i === 0 ? 0 : nb.h * 0.08 + i * nb.h * 0.148), (i === 0 ? hs : hs * 0.78) * (i === 0 ? 1 + spawnT * 0.08 : 1), i === 0 ? 1 : 0.88, i === 0 ? 0.1 : 0));
       site.drawTally(g.mode === 'bagyo' && g.rise ? [['Oras', fmt(g.elapsed)], ['Bayanihan', g.stats.bayanihan], ['T-spin', g.stats.tspins], ['Baha', `${Math.ceil(g.rise.t / 60)}s`]] : [['Oras', fmt(g.elapsed)], ['Bayanihan', g.stats.bayanihan], ['T-spin', g.stats.tspins], ['Combo', Math.max(0, g.stats.maxCombo)]]);
     }
     for (const im of Object.values(blocks)) { im.visible = im.count > 0; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; im.geometry.attributes.aGlow.needsUpdate = true; }
@@ -432,6 +464,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     else if (paradeBG) { paradeBG.t += dt; const P = getParade(); const k = paradeBG.t / 9; if (k > 1) paradeBG = null; else { P.group.visible = true; P.group.position.set(lerp(-26, 26, k), 0, -12.6); P.update(dt); } }
 
     cheerT = Math.max(0, cheerT - dt); if (crowd) crowd.update(t, cheerT > 0 ? 1 : 0);
+    site.updateBunting(t, dt, stormOn ? 1 : 0.2);
     fx.quality = post.level;
     fx.update(dt, t, { reduced, wind: stormOn ? 3.2 : 0, flash: lightning });
 
@@ -461,7 +494,10 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       else { const a = shots.establish(), q = ease(clamp(k / 0.85, 0, 1)); target = { pos: a.pos.map((v, i) => lerp(v, play.pos.getComponent(i), q)), look: a.look.map((v, i) => lerp(v, play.look.getComponent(i), q)), fov: lerp(a.fov, play.fov, q) }; rate = 1; }
     } else if (o.mode === 'play' || o.mode === 'safety') { target = asShot(play); rate = cam.mode === 'play' ? 1 : 4; }
     else if (o.mode === 'pause') { target = shots.pause(); rate = 2.5; }
-    else if (o.mode === 'results') { target = shots.results(t); rate = 1.6; }
+    else if (o.mode === 'results') {
+      target = shots.results(t); rate = 1.6;
+      if (cam.mode !== 'results' && g) { const h = site.house.group.position, n = 1 + Math.floor(g.lines / 10); fx.callout(`${n} PALAPAG`, h.x, site.house.top() + 1.6, h.z + 3, { color: 'gold', height: 2.1, life: 60, rise: 0.3, delay: 0.2 }); }
+    }
     else { target = shots.title(t); rate = cam.mode === 'title' ? 1 : 1.2; }
     // coming from another shot, ease into the play framing instead of jumping (then it holds still)
     if (mode === 'play' && cam.mode !== 'play' && cam.mode !== 'cine') cam.settle = 0.6;

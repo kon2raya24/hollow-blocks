@@ -148,14 +148,14 @@ function adobe() {
 }
 function putik() {
   const r = rng(808), lump = fbm(S, S, 40, 4, r), fine = noise(S, S, 2, r), peb = noise(S, S, 9, r), wet = fbm(S, S, 64, 3, r);
-  const mud = hexRGB('#5a4028'), dark = hexRGB('#3a2818'), clay = hexRGB('#7a5a38');
+  const mud = hexRGB('#4a3220'), dark = hexRGB('#2a1c10'), clay = hexRGB('#6a4a2c');
   return pbr((x, y) => {
     const i = y * S + x;
     let c = mix3(mud, lump[i] > 0.5 ? clay : dark, Math.abs(lump[i] - 0.5) * 1.5);
-    const pebble = peb[i] > 0.8, w = clamp((wet[i] - 0.45) * 3, 0, 1);
+    const pebble = peb[i] > 0.8, w = clamp((wet[i] - 0.3) * 2.5, 0, 1);
     if (pebble) c = [128, 118, 104];
     c = sc(c, 1 - w * 0.25);
-    return [...c, lump[i] * 1.2 + (pebble ? 0.5 : 0) + (fine[i] - 0.5) * 0.1, pebble ? 0.5 : lerp(0.55, 0.12, w)];
+    return [...c, lump[i] * 1.2 + (pebble ? 0.5 : 0) + (fine[i] - 0.5) * 0.1, pebble ? 0.45 : lerp(0.45, 0.05, w)];
   }, { strength: 4 });
 }
 
@@ -192,7 +192,7 @@ export function makeMaterials() {
   const b = baldosa();
   out.baldosa = withGlow(new THREE.MeshPhysicalMaterial({ map: b.map, normalMap: b.normalMap, roughnessMap: b.roughnessMap, roughness: 1, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.2 }));
   out.adobe = std(adobe());
-  out.putik = std(putik(), { envMapIntensity: 1.2 });
+  out.putik = std(putik(), { envMapIntensity: 1.8 });
   return out;
 }
 

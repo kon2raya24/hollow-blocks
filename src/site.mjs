@@ -66,16 +66,25 @@ export function mergeStatic(root) {
 
 // ---------- painted surfaces ----------
 function netTexture() {
-  // the shade net behind the well: a dark knit, and faint guide lines on each cell (the mason's strings)
-  const PXC = 32, W = 10 * PXC, H = 22 * PXC, c = T.canvas(W, H), x = c.getContext('2d');
-  x.fillStyle = '#14241c'; x.fillRect(0, 0, W, H);
-  for (let j = 0; j < H; j += 2) for (let i = (j / 2) % 2; i < W; i += 2) { x.fillStyle = `rgba(70,120,90,${0.3 + Math.random() * 0.35})`; x.fillRect(i, j, 1, 1); }
-  const sh = x.createLinearGradient(0, 0, W, 0); sh.addColorStop(0, 'rgba(0,0,0,0.35)'); sh.addColorStop(0.5, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,0.35)'); x.fillStyle = sh; x.fillRect(0, 0, W, H);
-  const top = 2 * PXC; // the two hidden rows above the play area: no strings there
-  x.strokeStyle = 'rgba(200,230,215,0.16)'; x.lineWidth = 1;
-  for (let k = 1; k < 10; k++) { x.beginPath(); x.moveTo(k * PXC + 0.5, top); x.lineTo(k * PXC + 0.5, H); x.stroke(); }
-  for (let k = 0; k < 20; k++) { x.beginPath(); x.moveTo(0, top + k * PXC + 0.5); x.lineTo(W, top + k * PXC + 0.5); x.stroke(); }
-  x.strokeStyle = 'rgba(255,190,120,0.45)'; x.lineWidth = 2; x.beginPath(); x.moveTo(0, top + 1); x.lineTo(W, top + 1); x.stroke(); // the top of the wall
+  // the shade net behind the well: a dark knit you can half see through (light and the wall behind show
+  // between the threads), and chalk lines on each cell, the way a mason marks his courses
+  const PXC = 48, W = 10 * PXC, H = 22 * PXC, c = T.canvas(W, H), x = c.getContext('2d'), r = T.rng(77);
+  const img = x.createImageData(W, H);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const p = (j * W + i) * 4, knot = (i % 3 === 0) || (j % 3 === 0), edge = Math.min(i, W - 1 - i) / W;
+    const a = knot ? 1 : 0.978, v = knot ? 1.25 : 1; // blended in linear light, so even a little open weave shows a lot
+    img.data[p] = 16 * v; img.data[p + 1] = 30 * v; img.data[p + 2] = 23 * v; img.data[p + 3] = 255 * Math.min(0.95, a + (edge < 0.06 ? 0.15 : 0));
+  }
+  x.putImageData(img, 0, 0);
+  const top = 2 * PXC; // the two hidden rows above the play area: no chalk there
+  const chalk = (x0, y0, x1, y1) => {
+    // a rough stroke: broken, a little wavy, heavier in places
+    const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 3);
+    for (let k = 0; k < n; k++) { if (r() < 0.12) continue; const t = k / n, px = x0 + (x1 - x0) * t + (r() - 0.5) * 1.2, py = y0 + (y1 - y0) * t + (r() - 0.5) * 1.2; x.fillStyle = `rgba(236,232,218,${0.16 + r() * 0.16})`; x.fillRect(px - 1, py - 1, 2 + r() * 1.5, 2 + r() * 1.5); }
+  };
+  for (let k = 1; k < 10; k++) chalk(k * PXC, top, k * PXC, H);
+  for (let k = 1; k < 20; k++) chalk(0, top + k * PXC, W, top + k * PXC);
+  x.strokeStyle = 'rgba(255,190,120,0.5)'; x.lineWidth = 3; x.beginPath(); x.moveTo(0, top + 1); x.lineTo(W, top + 1); x.stroke(); // the top of the wall
   return T.toTex(c);
 }
 // A plywood board with a stencilled word, as the crew would spray it.
@@ -166,7 +175,22 @@ export function buildSite(scene, { low = false } = {}) {
   pulley.add(mesh(new THREE.TorusGeometry(0.16, 0.035, 8, 18), steel), mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.1, 8), steel, { rx: Math.PI / 2 }));
   add(pulley, pole(V(0.6, top + 0.45, 0.4), V(0.6, top + 1.1, 0.4), 0.025, steel));
   // the shade net
-  const net = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, 22 * CS), new THREE.MeshStandardMaterial({ map: netTexture(), roughness: 1, color: '#9ab0a4' }));
+  const net = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, 22 * CS), new THREE.MeshStandardMaterial({ map: netTexture(), roughness: 1, color: '#b8c8bc', transparent: true, depthWrite: false }));
+  net.renderOrder = 1;
+  // behind the net: the wall this scaffold is for, half built (hollow blocks to about head height, stepped
+  // where the last courses stopped), its two columns standing up with their rebar
+  {
+    const wallT = T.concrete(81, '#a8a69e', { size: 128, repeat: [1, 1], grime: 0.2 });
+    const wallM = new THREE.MeshStandardMaterial({ map: wallT.map, normalMap: wallT.normalMap, roughness: 0.95 });
+    const list = [];
+    for (let c = 0; c < 26; c++) for (let k = 0; k < 14; k++) { const bx = -2.6 + k * 0.4 + (c % 2) * 0.2; if (bx > 2.6) continue; const stop = 18 + Math.round(Math.sin(k * 1.3) * 3 + (k > 8 ? 4 : 0)); if (c > stop) continue; list.push([bx, 0.1 + c * 0.2]); }
+    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(0.39, 0.19, 0.15), wallM, list.length), m4 = new THREE.Matrix4();
+    list.forEach(([bx, by], i) => { m4.makeTranslation(bx, by, -1.05); im.setMatrixAt(i, m4); });
+    im.receiveShadow = true; im.castShadow = false; world.add(im);
+    const colM = mat('#b0aca4', { roughness: 0.9 }), rebarM = mat('#8a4a28', { roughness: 0.55, metalness: 0.6 });
+    for (const cx of [-2.85, 2.85]) { add(box(0.32, 9.4, 0.32, colM, { x: cx, y: 4.7, z: -1.05, cast: false })); for (const [a2, b2] of [[-0.08, -0.08], [0.08, -0.08], [-0.08, 0.08], [0.08, 0.08]]) add(cyl(0.012, 0.012, 1.1, rebarM, { x: cx + a2, y: 9.95, z: -1.05 + b2, cast: false }, 5)); }
+    add(box(5.9, 0.3, 0.3, colM, { y: 5.6, z: -1.05, cast: false })); // a tie beam, poured
+  }
   net.position.set(0, BASE_Y + 11 * CS, -0.3); net.receiveShadow = true; net.userData.keep = true; add(net);
   // the danger light on top: an amber beacon that spins when the wall gets high
   const beacon = new THREE.Group(); beacon.position.set(-2.2, top + 0.62, 0.3);
@@ -188,6 +212,8 @@ export function buildSite(scene, { low = false } = {}) {
     return g;
   };
   mkBoard('hold', 'IMBAK', 2.1, 2.2); mkBoard('next', 'SUSUNOD', 2.1, 6.9);
+  // on a tall phone: a strip on the platform above the well instead
+  mkBoard('holdS', 'IMBAK', 1.7, 1.55); mkBoard('nextS', 'SUSUNOD', 3.45, 1.55);
   // the tally: a painted board the foreman writes on in chalk, redrawn when the numbers change
   const tallyC = T.canvas(420, 440), tallyTex = T.toTex(tallyC);
   const tally = new THREE.Group();
@@ -211,18 +237,29 @@ export function buildSite(scene, { low = false } = {}) {
   }
   // Where the boards go: beside the well on a wide screen; narrower and closer on a tall phone.
   function layoutBoards(compact) {
-    const bw = compact ? 1.34 : 2.1, gap = compact ? 0.26 : 0.36, lx = x0 - gap - bw / 2 - 0.22, rx = x1 + gap + bw / 2 + 0.22;
-    const place = (g, cx, cy, w, h) => {
-      g.position.set(cx, cy, 0.18); g.scale.set(w / g.children[0].geometry.parameters.width, h / g.children[0].geometry.parameters.height, 1);
+    const show = (g, on) => { g.visible = on; for (const p of g.userData.pipes) p.visible = on; };
+    for (const k of ['hold', 'next', 'tally']) show(boards[k], !compact);
+    for (const k of ['holdS', 'nextS']) show(boards[k], compact);
+    const place = (g, cx, cy, w, h, pipes = true) => {
+      g.position.set(cx, cy, pipes ? 0.18 : 0.56); g.scale.set(w / g.children[0].geometry.parameters.width, h / g.children[0].geometry.parameters.height, 1);
       const side = cx < 0 ? 1 : -1, sx = cx + side * w / 2, tx = side > 0 ? xs[0] : xs[1];
-      g.userData.pipes.forEach((p, i) => { const y = cy + (i ? -1 : 1) * h * 0.3, a = V(sx - side * 0.1, y, 0.14), b = V(tx, y, 0.36), d = b.clone().sub(a); p.position.copy(a).addScaledVector(d, 0.5); p.scale.set(1, d.length(), 1); p.quaternion.setFromUnitVectors(V(0, 1, 0), d.normalize()); });
-      g.userData.rect = { cx, cy, w, h };
+      g.userData.pipes.forEach((p, i) => { p.visible = pipes && g.visible; const y = cy + (i ? -1 : 1) * h * 0.3, a = V(sx - side * 0.1, y, 0.14), b = V(tx, y, 0.36), d = b.clone().sub(a); p.position.copy(a).addScaledVector(d, 0.5); p.scale.set(1, d.length(), 1); p.quaternion.setFromUnitVectors(V(0, 1, 0), d.normalize()); });
+      g.userData.rect = { cx, cy, w, h, row: !pipes };
     };
     const yTop = WELL.y1;
-    place(boards.hold, lx, yTop - (compact ? 0.9 : 1.1), bw, compact ? 1.8 : 2.2);
-    place(boards.tally, lx, yTop - (compact ? 3.05 : 3.55), bw, compact ? 2.2 : 2.3);
-    place(boards.next, rx, yTop - (compact ? 3.1 : 3.45), bw, compact ? 6.2 : 6.9);
-    return { lx, rx, bw, x0: lx - bw / 2, x1: rx + bw / 2 };
+    if (compact) {
+      // hold and next side by side, standing on the platform over the well
+      const cy = top + 0.5 + 0.78;
+      place(boards.holdS, x0 + 0.85 - 0.12, cy, 1.7, 1.55, false);
+      place(boards.nextS, x1 - 1.725 + 0.12, cy, 3.45, 1.55, false);
+      boards.hold.userData.rect = boards.holdS.userData.rect; boards.next.userData.rect = boards.nextS.userData.rect;
+      return { x0: x0 - 0.35, x1: x1 + 0.35, yTop: cy + 0.8 };
+    }
+    const bw = 2.1, gap = 0.36, lx = x0 - gap - bw / 2 - 0.22, rx = x1 + gap + bw / 2 + 0.22;
+    place(boards.hold, lx, yTop - 1.1, bw, 2.2);
+    place(boards.tally, lx, yTop - 3.55, bw, 2.3);
+    place(boards.next, rx, yTop - 3.45, bw, 6.9);
+    return { lx, rx, bw, x0: lx - bw / 2, x1: rx + bw / 2, yTop: top + 0.35 };
   }
 
   // ---------- the house going up next door ----------
@@ -283,18 +320,43 @@ export function buildSite(scene, { low = false } = {}) {
   add(mesh(new THREE.PlaneGeometry(3.4, 1.7), tarp, { x: -11.5, y: 1.2, z: 2.2, ry: 0.95 }));
   for (const [x, z] of [[-12.9, 1.2], [-10.1, 3.2]]) add(pole(V(x, 0, z), V(x, 2.2, z), 0.04, bamboo));
 
+  // ---------- banderitas, raised at each finished-house ceremony ----------
+  const FLAGC = ['#e8384f', '#ffd23f', '#2f6fd6', '#3fae5a', '#ff8ae2', '#ff9f43', '#f4f1e6'];
+  const flagGeo = new THREE.BufferGeometry(); flagGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-0.14, 0, 0, 0.14, 0, 0, 0, -0.3, 0]), 3)); flagGeo.computeVertexNormals();
+  const RUNS = [[V(x1 + 0.22, top + 0.9, 0.36), V(house.group.position.x - 4.3, 15.4, house.group.position.z + 2.8)], [V(x0 - 0.22, top + 0.9, 0.36), V(-11, 7.5, -12)], [V(house.group.position.x - 4.3, 15.4, house.group.position.z + 2.8), V(house.group.position.x + 4.3, 15.4, house.group.position.z + 2.8)], [V(-11, 7.5, -12), V(x0 - 0.22, top + 0.9, -0.42)]];
+  const PER = 28, bunting = new THREE.InstancedMesh(flagGeo, new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.7, emissive: '#ffffff', emissiveIntensity: 0.12 }), RUNS.length * PER);
+  bunting.count = 0; bunting.castShadow = true; dyn.add(bunting);
+  const flagsAt = [];
+  RUNS.forEach(([a, b], r) => { for (let k = 0; k < PER; k++) { const f = (k + 0.5) / PER; flagsAt.push({ r, p: V(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f - Math.sin(f * Math.PI) * 0.9, a.z + (b.z - a.z) * f), ph: k * 0.7 + r }); bunting.setColorAt(r * PER + k, new THREE.Color(FLAGC[(k + r) % FLAGC.length])); } });
+  const strings = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: '#2a2a2a' })); dyn.add(strings);
+  const raised = []; // per run: how far up it's been hauled (0..1)
+  const m4b = new THREE.Matrix4(), qb = new THREE.Quaternion(), eb = new THREE.Euler(), vb = V(0, 0, 0), one = V(1, 1, 1);
+  function raiseBunting() { if (raised.length < RUNS.length) raised.push(0); }
+  function resetBunting() { raised.length = 0; }
+  function updateBunting(t, dt, wind) {
+    bunting.count = 0; const segs = [];
+    raised.forEach((k, r) => {
+      raised[r] = Math.min(1, k + dt / 1.6); const lift = 1 - (1 - raised[r]) ** 3, drop = (1 - lift) * 6;
+      const [a, b] = RUNS[r]; let prev = null;
+      for (let s = 0; s <= 16; s++) { const f = s / 16, p = V(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f - Math.sin(f * Math.PI) * (0.9 + drop), a.z + (b.z - a.z) * f); if (prev) segs.push(prev.x, prev.y, prev.z, p.x, p.y, p.z); prev = p; }
+      for (const fl of flagsAt) if (fl.r === r) { qb.setFromEuler(eb.set(Math.sin(t * (2 + wind * 4) + fl.ph) * 0.35 * (0.4 + wind), Math.atan2(b.x - a.x, b.z - a.z) + Math.PI / 2, 0)); m4b.compose(vb.set(fl.p.x, fl.p.y - drop * Math.sin(((flagsAt.indexOf(fl) % PER) + 0.5) / PER * Math.PI), fl.p.z), qb, one); bunting.setMatrixAt(bunting.count++, m4b); }
+    });
+    bunting.instanceMatrix.needsUpdate = true; bunting.visible = bunting.count > 0;
+    strings.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(segs), 3)); strings.visible = segs.length > 0;
+  }
+
   // ---------- the street behind: houses, a sari-sari store, poles and wires, trees ----------
   const street = buildStreet(world, dyn);
 
   // the whole site throws and takes shadows; keep the number of draws down
   mergeStatic(world);
-  return { world, dyn, boards, layoutBoards, drawTally, house, beacon: { glass: beaconGlass, light: beaconLight, group: beacon }, pulley, net, props, street, slabM, groundM, mixer, drum };
+  return { world, dyn, boards, layoutBoards, drawTally, house, raiseBunting, resetBunting, updateBunting, beacon: { glass: beaconGlass, light: beaconLight, group: beacon }, pulley, net, props, street, slabM, groundM, mixer, drum };
 }
 
 // ---------- the house: floor by floor, the top one rising course by course ----------
 function buildHouse(parent, { x, z, w, d }) {
   const g = new THREE.Group(); g.position.set(x, 0, z); parent.add(g);
-  const FH = 3, FLOORS = 4;
+  const FH = 3, FLOORS = 5;
   const conc = new THREE.MeshStandardMaterial({ ...(() => { const t = T.concrete(41, '#b4b0a8', { size: 256, repeat: [2, 2], grime: 0.6 }); return { map: t.map, normalMap: t.normalMap }; })(), roughness: 0.92 });
   const chbT = T.concrete(43, '#a09e98', { size: 128, repeat: [1, 1], grime: 0.15 });
   const chb = new THREE.MeshStandardMaterial({ map: chbT.map, normalMap: chbT.normalMap, roughness: 0.95 });
