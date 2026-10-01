@@ -532,6 +532,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     else if (o.mode === 'pause') { target = shots.pause(); rate = 2.5; }
     else if (o.mode === 'results') {
       target = shots.results(t); rate = 1.6;
+      if (cam.mode !== 'results') fx.clear();
       if (cam.mode !== 'results' && g && camera.aspect > 1.1) { const h = site.house.group.position, n = 1 + Math.floor(g.lines / 10); fx.callout(`${n} PALAPAG`, h.x, site.house.top() + 1.6, h.z + 3, { color: 'gold', height: 2.1, life: 60, rise: 0.3, delay: 0.2 }); }
     }
     else { target = shots.title(t); rate = cam.mode === 'title' ? 1 : 1.2; }

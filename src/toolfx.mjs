@@ -16,7 +16,7 @@ export function createToolFx(scene, { cx, cy, top, fx, CS }) {
   hammer.visible = false; scene.add(hammer);
   // the semento bucket and its stream
   const bucket = part(new THREE.CylinderGeometry(0.3, 0.22, 0.4, 16, 1, true), M('#d84a2a', { side: THREE.DoubleSide })); bucket.visible = false; scene.add(bucket);
-  const streamM = M('#9a9c9a', { roughness: 0.3 }), streams = [];
+  const streamM = M('#9a9c9a', { roughness: 0.3, transparent: true, opacity: 0.85 }), streams = [];
   // the kreyn: a cable and a hook
   const cable = part(new THREE.CylinderGeometry(0.02, 0.02, 1, 6), M('#2a2a2a')), hook = new THREE.Group();
   hook.add(part(new THREE.BoxGeometry(0.5, 0.18, 0.18), yellow, 0, 0.1, 0), part(new THREE.TorusGeometry(0.14, 0.035, 8, 16, Math.PI * 1.4), steel, 0, -0.12, 0));
@@ -73,11 +73,11 @@ export function createToolFx(scene, { cx, cy, top, fx, CS }) {
         hammer.position.set(show.X + 1.4, show.Y + 2.0, 0.6); hammer.rotation.set(0, 0, swing);
         if (k >= 0.6 && !show.hit) { show.hit = true; burst(show.cells, o.kick); }
       } else if (show.kind === 'semento') {
-        bucket.visible = true; bucket.position.set(show.X, top + 1.2, 0.4); bucket.rotation.z = Math.min(1, k * 3) * 1.6;
+        bucket.visible = true; bucket.position.set(show.X, top + 0.85, 0.4); bucket.rotation.z = Math.min(1, k * 3) * 1.6;
         show.cells.forEach(([x, y], i) => {
-          if (!streams[i]) { const s = part(new THREE.CylinderGeometry(0.07, 0.09, 1, 8), streamM); scene.add(s); streams[i] = s; }
+          if (!streams[i]) { const s = part(new THREE.CylinderGeometry(0.035, 0.05, 1, 8), streamM); scene.add(s); streams[i] = s; }
           const s = streams[i], on = k > 0.2 && k < 0.85; s.visible = on;
-          if (on) { const y0 = top + 1.0, y1 = cy(y); s.position.set(cx(x), (y0 + y1) / 2, 0.3); s.scale.set(1, y0 - y1, 1); if (Math.random() < 0.3) fx.puff(cx(x), y1, 0.3, '#b8bab8', { size: 0.25, vy: 0.4, vz: 0.6, life: 0.5, a: 0.5 }); }
+          if (on) { const y0 = top + 0.6, y1 = cy(y); s.position.set(cx(x), (y0 + y1) / 2, 0.3); s.scale.set(1, y0 - y1, 1); if (Math.random() < 0.3) fx.puff(cx(x), y1, 0.3, '#b8bab8', { size: 0.25, vy: 0.4, vz: 0.6, life: 0.5, a: 0.5 }); }
         });
       } else if (show.kind === 'kreyn' && o.piece) {
         cable.visible = hook.visible = true;

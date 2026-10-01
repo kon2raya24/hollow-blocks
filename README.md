@@ -34,12 +34,12 @@
 
 ## Gamit (tools)
 
-In Bahay, Karera and Proyekto, every 8 to 12 pieces one comes with a glowing **toolbox** in one cell. Clear the row it lands in (or make a Bayanihan) to bank a tool, up to three; **E**, the 🧰 button or □ on a controller uses the oldest:
-- 🔨 **Martilyo** smashes the top block of each column under the piece.
-- 🪣 **Semento** pours into the covered holes in the bottom four rows.
-- 🏗️ **Kreyn** swaps the piece for a kawayan, lowered on its hook.
-- 🚜 **Pison** rolls across and flattens every column to the median height.
-- 🍞 **Merienda** halves gravity for 15 seconds, with a clock over the well.
+In Bahay, Karera and Proyekto, every 8 to 12 pieces one comes with a glowing **toolbox** in one cell. Clear the row it lands in (or make a Bayanihan) to bank a tool, up to three; **E**, the toolbox button or □ on a controller uses the oldest:
+- **Martilyo** smashes the top block of each column under the piece.
+- **Semento** pours into the covered holes in the bottom four rows.
+- **Kreyn** swaps the piece for a kawayan, lowered on its hook.
+- **Pison** rolls across and flattens every column to the median height.
+- **Merienda** halves gravity for 15 seconds, with a clock over the well.
 
 Tools are off in Deadline, Bagyo and the Daily, so those results stay comparable.
 
@@ -69,6 +69,7 @@ Tests (Node 20+): `node --test test/*.test.mjs`.
   - a T-spin double, gravity, soft and hard drops, and lock delay
   - clears, combos and back-to-back, hold, levels, the Deadline goal, the Bagyo flood, lock-out
   - exact replays
+  - every contract winnable: the bot plays each at a strong player's pace and must earn a star; the pars come from those runs, so three stars means matching it (Diskarte, Sunod-sunod and Tatlong T-spin need T-spins and combos the bot doesn't play, so their pars are set by hand) (`test/contracts.test.mjs`)
   - every tool, the toolboxes and the inventory, time limits, the lindol, rubble setups, each contract's goals and stars, the Daily seed, XP, ranks and medals (`test/modes.test.mjs`)
 - **The offline cache:** every module, three.js and the sounds are precached.
 - **Sanity floors:** from a bot (`src/bot.mjs`) that scores every placement with the classic El-Tetris weights.

@@ -5,6 +5,7 @@ import { createGame, step, MODES, DIFFICULTY } from './game.mjs';
 import { bot } from './bot.mjs';
 import { createAudio } from './audio.mjs';
 import { CONTRACTS, BARANGAYS, contractById, starsFor, unlocked, brgyStars, describe } from './contracts.mjs';
+import { icon } from './icons.mjs';
 import { xpFor, rankOf, RANKS, STYLES, styleOpen, MEDALS, newMedals, addStats, dateKey, dailySeed, shareText } from './progress.mjs';
 
 const Q = new URLSearchParams(location.search);
@@ -59,7 +60,7 @@ const data = {
   stars: saved.stars && typeof saved.stars === 'object' ? saved.stars : {}, daily: saved.daily && typeof saved.daily === 'object' ? saved.daily : {}, style: STYLES.some((x) => x.id === saved.style) ? saved.style : 'apartment',
 };
 if (!MODES[data.mode]) data.mode = 'bahay';
-const TOOL_ICON = { martilyo: '🔨', semento: '🪣', kreyn: '🏗️', pison: '🚜', merienda: '🍞' };
+for (const el of document.querySelectorAll('[data-icon]')) el.innerHTML = icon(el.dataset.icon, el.closest('.pad') ? 30 : 20);
 const persist = () => store.set(data);
 const reduced = () => data.calm || matchMedia('(prefers-reduced-motion: reduce)').matches;
 const seed = () => (TEST && Q.get('seed') ? Number(Q.get('seed')) : Math.floor(Math.random() * 1e9));
@@ -77,7 +78,7 @@ let mode = 'title', game = null, job = null; // job: the contract being played
 let demo = newDemo();
 function newDemo() { return createGame({ seed: seed(), mode: 'bahay', difficulty: 'madali' }); }
 
-const SCREENS = ['title', 'safety', 'pause', 'results', 'settings', 'map', 'brief', 'stats', 'how'];
+const SCREENS = ['title', 'safety', 'pause', 'results', 'settings', 'map', 'brief', 'stats', 'how', 'rankup'];
 function show(name) {
   for (const id of SCREENS) { const el = $(id), on = id === name; if (on && el.hidden) { el.classList.remove('in'); void el.offsetWidth; el.classList.add('in'); } el.hidden = !on; }
   if (name) { toasts.length = 0; $('toast').hidden = true; $('big').hidden = true; bigT = 0; }
@@ -96,7 +97,7 @@ function start() {
   if (!data.safety && !AUTOPLAY) { mode = 'safety'; show('safety'); return; }
   if (data.mode === 'proyekto' && !job) { openMap(); return; }
   const daily = data.mode === 'daily';
-  game = createGame({ seed: daily ? dailySeed(dateKey()) : seed(), mode: data.mode, difficulty: daily ? 'katamtaman' : data.difficulty, contract: data.mode === 'proyekto' ? job : null });
+  game = createGame({ seed: daily ? dailySeed(dateKey()) : seed(), mode: data.mode, difficulty: daily || data.mode === 'proyekto' ? 'katamtaman' : data.difficulty, contract: data.mode === 'proyekto' ? job : null });
   toolsKey = '';
   if (R) R.reset();
   mode = 'play'; clearInput(); show(null); hudKey = ''; sinceI = 0;
@@ -134,7 +135,7 @@ function finish(done) {
     $('next-job').onclick = () => openBrief(nextJob);
     $('share').hidden = g.mode !== 'daily';
     $('share').onclick = () => { const txt = shareText(dateKey(), r); try { if (navigator.share) navigator.share({ text: txt }).catch(() => {}); else navigator.clipboard.writeText(txt).then(() => toast('Nakopya! Copied to the clipboard.', 2000)); } catch { /* nothing to share with */ } };
-    if (after.index > before.index) setTimeout(() => { big('BAGONG RANGGO!', `${after.name}${STYLES.find((x) => x.rank === after.index) ? ` · bagong bahay: ${STYLES.find((x) => x.rank === after.index).name}` : ''}`, 3); if (view) view.celebrate(); A.event({ type: 'ceremony' }); }, 600);
+    rankUp = after.index > before.index ? after : null;
     $('results-title').textContent = g.mode === 'proyekto' ? (done ? 'Tapos ang kontrata!' : 'Hindi natapos…') : g.mode === 'karera' || g.mode === 'daily' ? 'Oras na!' : done ? 'Tapos sa oras!' : g.mode === 'bagyo' ? 'Inabot ng baha!' : 'Gumuho ang pader!';
     $('results-score').textContent = g.mode === 'deadline' ? (done ? clock(g.elapsed) : `${g.lines}/40`) : peso(g.score);
     const b = g.mode === 'proyekto' ? 0 : data.best[k];
@@ -143,7 +144,14 @@ function finish(done) {
     const stat = (label, v) => `<div><span>${label}</span><b>${v}</b></div>`;
     $('results-stats').innerHTML = stat('Hanay', g.lines) + stat('Naitayo', `${1 + Math.floor(g.lines / 10)} palapag`) + stat('Oras', clock(g.elapsed)) + stat('Bayanihan', g.stats.bayanihan) + stat('T-spin', g.stats.tspins) + stat('Combo', Math.max(0, g.stats.maxCombo));
     $('results-tip').textContent = `"${pick(TIPS)}" — Kapatas`;
-    show('results');
+    if (rankUp) {
+      // a rank-up is its own moment, before the results
+      const st = STYLES.find((x) => x.rank === rankUp.index);
+      $('rankup-name').textContent = rankUp.name;
+      $('rankup-note').textContent = st ? `Bagong istilo ng bahay: ${st.name}. Piliin sa Tala at Medalya.` : 'Ang pinakamataas na ranggo sa site!';
+      show('rankup'); if (view) setTimeout(() => view.celebrate(), 200); A.event({ type: 'ceremony' }); buzz([40, 30, 80]);
+      clearTimeout(rankT); rankT = setTimeout(() => { if (!$('rankup').hidden) show('results'); }, 4500);
+    } else show('results');
   }, done ? 1800 : 1600);
 }
 
@@ -165,7 +173,7 @@ function big(title, sub = '', secs = 1.4) {
   const el = $('big'); el.querySelector('b').textContent = title; el.querySelector('span').textContent = sub;
   el.hidden = false; el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); bigT = secs;
 }
-let bubbleT = 0, sayCool = 0, sinceI = 0;
+let bubbleT = 0, sayCool = 0, sinceI = 0, rankUp = null, rankT = 0;
 function say(k, force = false) {
   if (!view) { if (R) R.say(k); return; }
   if (!force && sayCool > 0) return;
@@ -191,7 +199,7 @@ function onEvent(e) {
     case 'levelUp': if (!(view && game.mode === 'bahay' && (1 + Math.floor(game.lines / 10)) % 5 === 0)) { big(`Palapag ${e.level}!`, 'Bagong palapag · New floor', 1.5); say('level', true); } break;
     case 'rise': if (Math.random() < 0.35) say('rise'); hint('bagyo', 'Tumataas ang baha mula sa ilalim! Punuin ang butas para matanggal ang putik.'); break;
     case 'hardDrop': buzz(10); break;
-    case 'toolEarned': toast(`May bagong gamit: ${TOOL_ICON[e.tool]} ${e.tool.toUpperCase()}! Pindutin ang ${touch ? '🧰' : 'E'} para gamitin.`, 2400); buzz([10, 20, 10]); break;
+    case 'toolEarned': toast(`May bagong gamit: ${e.tool.toUpperCase()}! Pindutin ang ${touch ? 'kahon ng gamit' : 'E'} para gamitin.`, 2400); buzz([10, 20, 10]); break;
     case 'tool': buzz(25); say('tool', true); break;
     case 'lindol': buzz([60, 40, 60]); say('lindol', true); break;
     case 'perfect': big('MALINIS!', 'Perfect clear', 1.6); break;
@@ -371,7 +379,7 @@ function openMap() {
   mode = 'map'; job = null;
   const total = CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0);
   $('map-note').textContent = `${total}/45 ★ · Kailangan ng 8 ★ sa isang barangay para sa susunod.`;
-  $('map-body').innerHTML = BARANGAYS.map((name, b) => `<div class="card brgy"><h3>Brgy. ${name}<small>${brgyStars(data.stars, b)}/15 ★</small></h3>${CONTRACTS.filter((c) => c.brgy === b).map((c) => { const st = data.stars[c.id] || 0, open = unlocked(data.stars, c.id); return `<button type="button" class="job" data-job="${c.id}" ${open ? '' : 'disabled'}>${open ? c.name : '🔒 ' + c.name}<i>${'★'.repeat(st)}${'☆'.repeat(3 - st)}</i></button>`; }).join('')}</div>`).join('');
+  $('map-body').innerHTML = BARANGAYS.map((name, b) => `<div class="card brgy"><h3>Brgy. ${name}<small>${brgyStars(data.stars, b)}/15 ★</small></h3>${CONTRACTS.filter((c) => c.brgy === b).map((c) => { const st = data.stars[c.id] || 0, open = unlocked(data.stars, c.id); return `<button type="button" class="job" data-job="${c.id}" ${open ? '' : 'disabled'}><span>${open ? '' : icon('lock', 18) + ' '}${c.name}</span><i>${'★'.repeat(st)}${'☆'.repeat(3 - st)}</i></button>`; }).join('')}</div>`).join('');
   for (const bt of $('map-body').querySelectorAll('[data-job]')) bt.onclick = () => openBrief(contractById(bt.dataset.job));
   show('map');
 }
@@ -397,12 +405,13 @@ function openStats() {
     <h3 style="margin:10px 0 4px;font:italic 900 18px 'Barlow Condensed';color:#ffd23f">MEDALYA ${data.medals.length}/${MEDALS.length}</h3>
     <div class="medals">${MEDALS.map((m) => `<div class="medal ${data.medals.includes(m.id) ? 'got' : ''}" title="${m.desc}"><b>★</b>${m.name}</div>`).join('')}</div>
     <h3 style="margin:10px 0 4px;font:italic 900 18px 'Barlow Condensed';color:#ffd23f">ISTILO NG BAHAY</h3>
-    <div class="modes">${STYLES.map((x) => `<button type="button" data-style="${x.id}" aria-pressed="${data.style === x.id}" ${styleOpen(data.xp, x.id) ? '' : 'disabled'}>${styleOpen(data.xp, x.id) ? x.name : '🔒 ' + x.name + ' · ' + RANKS[x.rank].name}</button>`).join('')}</div>`;
+    <div class="modes">${STYLES.map((x) => `<button type="button" data-style="${x.id}" aria-pressed="${data.style === x.id}" ${styleOpen(data.xp, x.id) ? '' : 'disabled'}>${styleOpen(data.xp, x.id) ? x.name : icon('lock', 16) + ' ' + x.name + ' · ' + RANKS[x.rank].name}</button>`).join('')}</div>`;
   for (const bt of $('stats-body').querySelectorAll('[data-style]')) bt.onclick = () => { data.style = bt.dataset.style; persist(); if (view) view.setHouseStyle(data.style); openStats(); };
   show('stats');
 }
 $('stats-btn').onclick = openStats;
 $('stats-ok').onclick = () => toMenu();
+$('rankup-ok').onclick = () => { clearTimeout(rankT); show('results'); };
 $('how-btn').onclick = () => { mode = 'how'; show('how'); };
 $('how-ok').onclick = () => toMenu();
 $('play').onclick = start;
@@ -421,8 +430,8 @@ function hud(g) {
     const tk = g.tools.join(',');
     if (tk !== toolsKey) {
       const was = toolsKey ? toolsKey.split(',').filter(Boolean).length : 0; toolsKey = tk;
-      [...$('tools').querySelectorAll('span')].forEach((el, i) => { const t = g.tools[i]; el.textContent = t ? TOOL_ICON[t] : '·'; el.className = t ? (i === 0 ? 'next' : '') : 'empty'; el.title = t || ''; if (t && i >= was && i < g.tools.length) { el.classList.add('pop'); } });
-      $('pad-tool').disabled = !g.tools.length; $('pad-tool').innerHTML = g.tools.length ? `${TOOL_ICON[g.tools[0]]}<b>${g.tools.length}</b>` : '🧰';
+      [...$('tools').querySelectorAll('span')].forEach((el, i) => { const t = g.tools[i]; el.innerHTML = t ? icon(t, 30) : icon('toolbox', 22); el.className = t ? (i === 0 ? 'next' : '') : 'empty'; el.title = t || ''; if (t && i >= was && i < g.tools.length) { el.classList.add('pop'); } });
+      $('pad-tool').disabled = !g.tools.length; $('pad-tool').innerHTML = g.tools.length ? `${icon(g.tools[0], 30)}<b>${g.tools.length}</b>` : icon('toolbox', 30);
     }
   }
   const best = data.best[bestKey()] || 0;
