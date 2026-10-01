@@ -222,6 +222,26 @@ body.replaying .help, body.replaying .pad { display: none !important; }
 @keyframes capt { 50% { box-shadow: 0 0 0 2px var(--dark), 0 0 18px rgba(255,210,63,.9); } } .kt tr.cap .add { animation: capt 0.8s infinite; border-color: var(--gold); }
 #settings .card { grid-template-columns: 1fr; } @media (min-width: 760px) { #settings .card { grid-template-columns: repeat(2, 1fr); } } @media (min-width: 1100px) { #settings .card { grid-template-columns: repeat(4, 1fr); } }
 #settings .val { color: var(--gold); font-weight: 800; min-width: 7.5em; text-align: right; font-size: 13px; }
+/* v7: Tapatan, the weekly banner, the Inspector */
+body.touch [data-mode="tapatan"] { display: none; }
+#weekly { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 14px; align-items: center; text-align: left; width: min(620px, 94vw); padding: 8px 14px; background: linear-gradient(90deg, rgba(200,50,42,.88), rgba(60,20,30,.9)); border: 2px solid #ffb08a; box-shadow: 0 0 0 2px var(--dark), 0 8px 20px rgba(0,0,0,.45); clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%); }
+#weekly small { display: block; font: italic 800 11px/1 "Barlow Condensed", sans-serif; letter-spacing: .2em; text-transform: uppercase; color: #ffd8c8; }
+#weekly b { display: block; font: italic 900 24px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; color: #fff8e1; text-shadow: 0 2px 0 var(--dark); }
+#weekly span { display: block; font-size: 13px; line-height: 1.25; } #weekly em { display: block; font: italic 800 12px/1.2 "Barlow Condensed", sans-serif; letter-spacing: .08em; color: #ffd23f; font-style: normal; text-transform: uppercase; }
+#weekly i { font-style: normal; } #weekly button { min-height: 38px; padding: 4px 14px; font-size: 15px; }
+@media (max-width: 560px) { #weekly { grid-template-columns: auto 1fr; } #weekly button { grid-column: 1 / -1; } #weekly span { display: none; } }
+#inspbar { position: absolute; left: 50%; transform: translateX(-50%); top: calc(max(10px, env(safe-area-inset-top)) + 64px); width: min(380px, 70vw); display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font: italic 800 12px/1 "Barlow Condensed", sans-serif; letter-spacing: .14em; color: #ffd8c8; text-shadow: 0 1px 2px #000; pointer-events: none; }
+#inspbar .track { height: 10px; background: rgba(14,10,18,.8); box-shadow: 0 0 0 2px var(--dark), inset 0 0 0 1px rgba(255,255,255,.2); transform: skewX(-20deg); position: relative; }
+#inspbar .track i { position: absolute; left: 0; top: 0; bottom: 0; width: var(--p, 0%); background: linear-gradient(90deg, #ffb08a, #e8402a); }
+#inspbar.late .track i { animation: capt .6s infinite; background: #ff2a10; } #inspbar em { font-style: normal; color: #fff; font-size: 14px; }
+#ibubble { position: absolute; left: 0; top: 0; padding: 4px 11px 3px; background: #fffaf0; color: #7a1a14; border: 2px solid #c8322a; border-radius: 4px; font: italic 900 17px/1.1 "Barlow Condensed", sans-serif; white-space: nowrap; box-shadow: 0 4px 0 rgba(0,0,0,.25); pointer-events: none; z-index: 1; }
+#ibubble::after { content: ""; position: absolute; left: 50%; bottom: -9px; margin-left: -6px; border: 6px solid transparent; border-top: 8px solid #c8322a; border-bottom: 0; }
+#ibubble.pop { animation: bark .28s cubic-bezier(.2,1.6,.4,1); }
+#tapatan .card { width: min(820px, 94vw); max-width: none; text-align: left; display: grid; gap: 4px 30px; } @media (min-width: 760px) { #tapatan .card { grid-template-columns: 1fr 1fr; } }
+#tapatan h3 { margin: 4px 0; font: italic 900 22px/1 "Barlow Condensed", sans-serif; letter-spacing: .06em; text-transform: uppercase; } #tapatan .modes { justify-content: flex-start; } #tapatan .grp { display: grid; gap: 6px; }
+#map-note .modes { display: inline-flex; margin-bottom: 6px; }
+body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bottom: 60px; left: 50%; transform: translateX(-50%); }
+@media (max-height: 780px) { #title .mats { display: none; } #title { gap: 7px; } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 </head>
@@ -242,7 +262,9 @@ body.replaying .help, body.replaying .pad { display: none !important; }
       <div id="ghostbar" hidden><span><i data-icon="ghost"></i> MULTO</span><div class="track"><span class="fill"></span><i class="gh"></i><i class="you"></i></div><b></b></div>
       <div id="lesson-corner" hidden><button type="button" id="lretry">Ulit · Retry (R)</button><div id="lesson-tip"></div></div>
       <div id="finesse" hidden></div>
+      <div id="inspbar" hidden><span><i data-icon="stamp"></i> INSPEKSYON</span><div class="track"><i></i></div><em></em></div>
     </div>
+    <div id="ibubble" hidden></div>
     <div id="rbubble" hidden></div>
     <div id="bubble" hidden></div>
     <div id="big" hidden><b></b><span></span></div>
@@ -260,8 +282,10 @@ body.replaying .help, body.replaying .pad { display: none !important; }
         <button type="button" data-mode="proyekto">Proyekto</button>
         <button type="button" data-mode="versus">Laban</button>
         <button type="button" data-mode="training">Pagsasanay</button>
+        <button type="button" data-mode="tapatan">Tapatan · 2P</button>
       </div>
       <p class="muted" id="mode-note"></p>
+      <div id="weekly"></div>
       <div class="modes" role="group" aria-label="Difficulty">
         <button type="button" data-diff="madali">Madali</button>
         <button type="button" data-diff="katamtaman">Katamtaman</button>
@@ -355,12 +379,23 @@ body.replaying .help, body.replaying .pad { display: none !important; }
         <li><b>Gamit (tools):</b> minsan may kahon ng gamit ang isang piraso. Linisin ang hanay nito (o mag-Bayanihan) para makakuha, hanggang tatlo. <i data-icon="martilyo"></i> Martilyo: basag ang pinakamataas na bloke sa ilalim ng piraso. <i data-icon="semento"></i> Semento: tapalan ang mga butas sa ibaba. <i data-icon="kreyn"></i> Kreyn: gawing kawayan ang piraso. <i data-icon="pison"></i> Pison: patagin ang tumpok. <i data-icon="merienda"></i> Merienda: bagal ang bagsak nang 15 segundo.</li>
         <li><b>Mga mode:</b> Bahay (walang katapusan), Deadline (40 hanay), Bagyo (putik mula sa ilalim), Karera (2 minuto, pinakamataas na kita), Daily (parehong piraso para sa lahat ngayong araw), Proyekto (15 kontrata, 1–3 bituin).</li>
         <li><b>Laban:</b> ang well mo at ang sa kalaban, magkatabi. Bawat clear ay nagpapadala ng putik (2 hanay = 1, 3 = 2, Bayanihan = 4, T-spin double = 4, may dagdag ang sunod-sunod at combo). Ang paparating na putik (mga sako sa tabi ng well) ay nahaharang ng sarili mong clear. Talunin ang anim sa Liga ng Barangay.</li>
+        <li><b>Tapatan (2P, desktop):</b> dalawang tao sa isang keyboard (P1: A D S W, Q E, C; P2: mga arrow, , . /) o may controller. Pinakamahusay sa tatlo; may handicap sa padala at sa simulang taas.</li>
+        <li><b>Proyekto Kabanata 2:</b> brownout (flashlight lang), hangin (dumudulas ang piraso), bitak (gumuguho ang bloke), Lunes (walang kawayan), limitadong gamit, at ang City Inspector na nagtatatak ng REJECTED. Linisin ang tatak para may dagdag na oras.</li>
+        <li><b>Lingguhan:</b> bawat linggo, ibang twist (Bagyo, Lindol, Gamit Lang, Mabilis, Retro). Tapusin para sa medalya at token.</li>
+        <li><b>Gamit sa ranggo:</b> <i data-icon="plumada"></i> Plumada (Kapatas): ipinapakita ang pinakamagandang puwesto ng susunod na tatlong piraso. <i data-icon="barena"></i> Barena (Inhinyero): binubutas ang isang hanay pababa. <i data-icon="andamyo"></i> Andamyo (Arkitekto): sasalo ng susunod na putik o isang pagguho.</li>
         <li><b>Pagsasanay:</b> mga aralin sa T-spin single, double at triple, 4-wide combo at finesse. Sundan ang gintong anino. Binibilang ng finesse coach ang sayang na pindot.</li>
         <li><b>Replay at multo:</b> naitatala ang bawat laro. Sa Deadline at Karera, hinahabol mo ang multo ng pinakamagandang takbo mo. Panoorin (1×, 2×, 4×) at ibahagi bilang link.</li>
         <li><b>Ayos:</b> bilang ng susunod na piraso, DAS, ARR, bilis ng dahan, 180° na ikot, imbak, at pagpapalit ng mga pindutan sa keyboard at controller.</li>
         <li><b>Ranggo:</b> bawat laro ay may XP. Mula Peon hanggang Arkitekto, at may bagong istilo ng bahay sa bawat ranggo.</li>
       </ul></div>
       <button type="button" class="primary" id="how-ok">Sige! · Got it</button>
+    </section>
+
+    <section class="screen" id="tapatan" hidden>
+      <h2>Tapatan · 2 Manlalaro</h2>
+      <p class="muted">Dalawang tao, isang computer. Pinakamahusay sa tatlong ronda. Ang handicap: dami ng putik na ipinapadala, at taas ng kalat sa simula.</p>
+      <div class="card" id="tapatan-body"></div>
+      <div class="row"><button type="button" class="primary" id="tap-go">Simulan · Start</button><button type="button" id="tap-keys">Mga pindutan · Keys</button><button type="button" class="menu">Menu</button></div>
     </section>
 
     <section class="screen" id="vs" hidden>

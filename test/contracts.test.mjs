@@ -16,7 +16,7 @@ const play = (c, seed, pace, style = null) => {
   return starsFor(c, { done: g.phase === 'done', ticks: g.elapsed, pieces: g.pieces, lines: g.lines, score: g.score });
 };
 
-for (const c of CONTRACTS.filter((x) => !SKILL.includes(x.id))) {
+for (const c of CONTRACTS.filter((x) => x.brgy < 3 && !SKILL.includes(x.id))) { // chapter 1 (chapter 2: chapter2.test.mjs)
   test(`${c.id} ${c.name}: the bot wins it, and three stars take its best`, () => {
     const style = c.id === 'sr5' ? 'tetris' : null;
     const stars = [1, 2].map((seed) => play(c, seed, 8, style));

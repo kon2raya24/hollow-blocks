@@ -148,9 +148,16 @@ const MEM = new WeakMap();
 export function bot(g, { pace = 0, style = null } = {}) {
   if (g.phase !== 'play' || !g.cur) return NOINPUT;
   let m = MEM.get(g);
-  if (!m || m.piece !== g.pieces) { m = { piece: g.pieces, keys: choose(g, style)?.keys || ['hard'], wait: pace }; MEM.set(g, m); }
+  if (!m || m.piece !== g.pieces) { const c = choose(g, style); m = { piece: g.pieces, keys: c?.keys || ['hard'], land: c?.land || null, wait: pace }; MEM.set(g, m); }
   if (m.wait-- > 0) return NOINPUT;
   m.wait = pace;
+  // in the wind the piece drifts, so steer to where it should land instead of replaying the keys
+  if (g.wind && m.land && m.keys[0] !== 'hold') {
+    const t = m.land, c = g.cur;
+    if (c.type !== t.type) return { pressed: ['hard'], held: [] };
+    const k = c.rot !== t.rot ? ((t.rot - c.rot + 4) % 4 === 3 ? 'ccw' : 'cw') : c.x < t.x ? 'right' : c.x > t.x ? 'left' : 'hard';
+    return { pressed: [k], held: [] };
+  }
   const k = m.keys.shift();
   return k ? { pressed: [k], held: [] } : NOINPUT;
 }

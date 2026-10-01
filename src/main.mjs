@@ -6,10 +6,12 @@ import { bot } from './bot.mjs';
 import { createMatch, matchStep, LADDER, LEVELS, rivalById, ladderOpen } from './versus.mjs';
 import { createRecorder, record, encode, decode, startPlayback, playTick, runToEnd } from './replay.mjs';
 import { LESSONS, lessonById, lessonFor, lessonGame, judge, createCoach, coachTick } from './training.mjs';
+import { DEF_KEYS_P1, DEF_KEYS_P2, routes, createInput, press as pressIn, drain, clearInput as clearIn } from './controls.mjs';
+import { ranked } from './bot.mjs';
 import { createAudio } from './audio.mjs';
-import { CONTRACTS, BARANGAYS, contractById, starsFor, unlocked, brgyStars, describe } from './contracts.mjs';
+import { CONTRACTS, BARANGAYS, CHAPTERS, chapterOpen, contractById, starsFor, unlocked, brgyStars, describe } from './contracts.mjs';
 import { icon, portrait } from './icons.mjs';
-import { xpFor, rankOf, RANKS, STYLES, styleOpen, MEDALS, newMedals, addStats, dateKey, dailySeed, shareText } from './progress.mjs';
+import { xpFor, rankOf, RANKS, STYLES, styleOpen, MEDALS, newMedals, addStats, dateKey, dailySeed, shareText, toolsetFor, TOOL_RANK, weeklyEvent, countdown, WEEKLY_MEDALS, EVENTS } from './progress.mjs';
 
 const Q = new URLSearchParams(location.search);
 const TEST = Q.get('test') === '1';
@@ -79,7 +81,12 @@ const data = {
   v: 6, rules: { ...DEF_RULES, ...(saved.rules && typeof saved.rules === 'object' ? saved.rules : {}) },
   keys: validMap(saved.keys, DEF_KEYS, (k) => typeof k === 'string'), pad: validMap(saved.pad, DEF_PAD, (b) => Number.isInteger(b) && b >= 0 && b < 20),
   vs: { beaten: Array.isArray(saved.vs?.beaten) ? saved.vs.beaten : [], wins: Number.isFinite(saved.vs?.wins) ? saved.vs.wins : 0 }, lessons: Array.isArray(saved.lessons) ? saved.lessons : [],
+  // v7: Tapatan's two key maps and setup, the weekly event's record, the tokens
+  keys1: validMap(saved.keys1, DEF_KEYS_P1, (k) => typeof k === 'string'), keys2: validMap(saved.keys2, DEF_KEYS_P2, (k) => typeof k === 'string'),
+  tap: { src: ['keys', 'keys'], mult: [1, 1], rubble: [0, 0], ...(saved.tap && typeof saved.tap === 'object' ? saved.tap : {}) },
+  weekly: saved.weekly && typeof saved.weekly === 'object' ? saved.weekly : {}, tokens: Number.isFinite(saved.tokens) ? saved.tokens : 0, wmedals: Array.isArray(saved.wmedals) ? saved.wmedals : [],
 };
+if (touch && data.mode === 'tapatan') data.mode = 'bahay'; // two players need a keyboard
 if (!MODES[data.mode]) data.mode = 'bahay';
 for (const el of document.querySelectorAll('[data-icon]')) el.innerHTML = icon(el.dataset.icon, el.closest('.pad') ? 30 : 20);
 const persist = () => store.set(data);
@@ -98,10 +105,14 @@ A.setMuted(data.muted); A.setMix(data.opt);
 let mode = 'title', game = null, job = null; // job: the contract being played
 let match = null, vsPick = null, lesson = null, coach = null, rec = null, ghost = null, viewer = null, capture = null;
 let lessonEnd = 0; // ticks left before a lesson's verdict shows
+let tap = null; // Tapatan's series: { wins: [p1, p2], round }
+const tapIn = [createInput(), createInput()];
+let tapRoutes = new Map();
+const tapKeys = () => { tapRoutes = routes([data.tap.src[0] === 'keys' ? data.keys1 : null, data.tap.src[1] === 'keys' ? data.keys2 : null]); };
 let demo = newDemo();
 function newDemo() { return createGame({ seed: seed(), mode: 'bahay', difficulty: 'madali' }); }
 
-const SCREENS = ['title', 'safety', 'pause', 'results', 'settings', 'map', 'brief', 'stats', 'how', 'rankup', 'vs', 'rival', 'lessons', 'lesson', 'lessondone', 'replays', 'keys'];
+const SCREENS = ['title', 'safety', 'pause', 'results', 'settings', 'map', 'brief', 'stats', 'how', 'rankup', 'vs', 'rival', 'lessons', 'lesson', 'lessondone', 'replays', 'keys', 'tapatan'];
 function show(name) {
   for (const id of SCREENS) { const el = $(id), on = id === name; if (on && el.hidden) { el.classList.remove('in'); void el.offsetWidth; el.classList.add('in'); } el.hidden = !on; }
   if (name) { toasts.length = 0; $('toast').hidden = true; $('big').hidden = true; bigT = 0; }
@@ -132,10 +143,14 @@ function start() {
   if (data.mode === 'proyekto' && !job) { openMap(); return; }
   if (data.mode === 'versus' && !vsPick) { openVs(); return; }
   if (data.mode === 'training' && !lesson) { openLessons(); return; }
+  if (data.mode === 'tapatan' && !tap) { openTapatan(); return; }
   if (data.mode !== 'training') lesson = null;
   const daily = data.mode === 'daily', sd = daily ? dailySeed(dateKey()) : seed(), opts = ruleOpts();
   match = null; ghost = null; viewer = null; lessonEnd = 0;
-  if (data.mode === 'versus') {
+  if (data.mode === 'tapatan') {
+    match = createMatch({ seed: sd, local: true, opts, opts2: opts, mult: data.tap.mult, rubble: data.tap.rubble });
+    game = match.a; rec = null; clearIn(tapIn[0]); clearIn(tapIn[1]); tapKeys();
+  } else if (data.mode === 'versus') {
     match = createMatch({ seed: sd, rival: vsPick, opts });
     game = match.a;
     rec = createRecorder({ v: 1, vs: vsPick, seed: sd, opts });
@@ -144,8 +159,9 @@ function start() {
     game = lessonGame(lesson, opts); rec = null;
     $('lesson-tip').textContent = lesson.tip;
   } else {
-    const diff = daily || data.mode === 'proyekto' ? 'katamtaman' : data.difficulty;
-    game = createGame({ seed: sd, mode: data.mode, difficulty: diff, contract: data.mode === 'proyekto' ? job : null, opts });
+    const diff = daily || data.mode === 'proyekto' || data.mode === 'lingguhan' ? 'katamtaman' : data.difficulty;
+    const wk = data.mode === 'lingguhan' ? weeklyEvent() : null;
+    game = createGame({ seed: wk ? dailySeed(wk.week) : sd, mode: data.mode, difficulty: diff, contract: data.mode === 'proyekto' ? job : wk ? wk.contract : null, opts, toolset: toolsetFor(data.xp) });
     rec = createRecorder({ v: 1, mode: data.mode, diff, seed: sd, job: data.mode === 'proyekto' && job ? job.id : undefined, opts });
     if (data.rules.ghost && (data.mode === 'deadline' || data.mode === 'karera')) loadGhost(game, bestKey());
   }
@@ -155,7 +171,10 @@ function start() {
   toolsKey = '';
   if (R) R.reset();
   mode = 'play'; clearInput(); show(null); hudKey = ''; sinceI = 0;
-  if (match) big('LABAN!', `vs ${match.prof.name}`, 1.6);
+  if (match && match.local) big(`RONDA ${tap.round}`, `P1 ${tap.wins[0]} – ${tap.wins[1]} P2 · Tatlong ronda`, 1.8);
+  else if (match) big('LABAN!', `vs ${match.prof.name}`, 1.6);
+  else if (game.mode === 'lingguhan') big(weeklyEvent().name, 'Lingguhan · tatlong minuto', 1.8);
+  else if (game.insp) { big('ANG INSPEKTOR', 'Dumating ang City Inspector!', 2.2); setTimeout(() => inspSays('enter', true), 1800); }
   else if (lesson) big(lesson.name, 'Pagsasanay · Sundan ang gintong anino', 1.8);
   else big(job && data.mode === 'proyekto' ? job.name : MODES[data.mode].name, job && data.mode === 'proyekto' ? describe(job).goal : { deadline: '40 hanay, bilisan!', bagyo: 'Tumataas ang baha!', karera: 'Dalawang minuto. Kita, kita, kita!', daily: `Daily ${dateKey()} · pareho para sa lahat` }[data.mode] || 'Buuin ang bahay!', 1.6);
   if (match) hint('versus', 'Ang mga sako sa tabi ng well: putik na paparating. Mag-clear para harangin!');
@@ -176,6 +195,14 @@ function finish(done) {
     const r = { mode: g.mode, done, ticks: g.elapsed, score: g.score, lines: g.lines, level: g.level, pieces: g.pieces, bayanihan: g.stats.bayanihan, tspins: g.stats.tspins, tspinTriple: g.stats.tspinTriple || 0, maxCombo: g.stats.maxCombo, perfect: g.stats.perfect, tools: g.stats.tools, daily: g.mode === 'daily' };
     let stars = 0;
     if (g.mode === 'proyekto' && g.contract) { stars = starsFor(g.contract, r); r.stars = stars; data.stars[g.contract.id] = Math.max(data.stars[g.contract.id] || 0, stars); }
+    let wkNote = '';
+    if (g.mode === 'lingguhan') {
+      const w = weeklyEvent(), prevW = data.weekly.week === w.week ? data.weekly : { week: w.week, best: 0, token: false };
+      prevW.best = Math.max(prevW.best || 0, g.score);
+      if (done && !prevW.token) { prevW.token = true; data.tokens++; wkNote = `+1 token (${data.tokens})`; }
+      if (done && !data.wmedals.includes(`wk-${w.id}`)) { data.wmedals.push(`wk-${w.id}`); wkNote += `${wkNote ? ' · ' : ''}Medalya: ${w.name}`; }
+      data.weekly = prevW; isBest = g.score >= prevW.best && g.score > 0;
+    }
     if (g.mode === 'daily') { const dk = dateKey(); const prevD = data.daily[dk]; if (!prevD || g.score > prevD.score) data.daily = { [dk]: { score: g.score, lines: g.lines, bayanihan: g.stats.bayanihan } }; }
     const before = rankOf(data.xp), gain = xpFor(r);
     data.xp += gain; data.stats = addStats(data.stats, r);
@@ -200,6 +227,7 @@ function finish(done) {
     $('results-score').textContent = g.mode === 'deadline' ? (done ? clock(g.elapsed) : `${g.lines}/40`) : peso(g.score);
     const b = g.mode === 'proyekto' ? 0 : data.best[k];
     $('results-best').textContent = isBest ? 'Bagong best! New best!' : b ? `Best: ${g.mode === 'deadline' ? clock(b) : peso(b)}` : '';
+    if (wkNote) $('results-best').textContent += ` · ${wkNote}`;
     $('results-best').className = isBest ? 'new' : 'muted';
     const stat = (label, v) => `<div><span>${label}</span><b>${v}</b></div>`;
     $('results-stats').innerHTML = stat('Hanay', g.lines) + stat('Naitayo', `${1 + Math.floor(g.lines / 10)} palapag`) + stat('Oras', clock(g.elapsed)) + stat('Bayanihan', g.stats.bayanihan) + stat('T-spin', g.stats.tspins) + stat('Combo', Math.max(0, g.stats.maxCombo));
@@ -251,6 +279,48 @@ function finishVersus(winner) {
     else show('results');
   }, 1700);
 }
+
+// ---------- Tapatan: rounds, the banner between them, and the winner's ceremony ----------
+function tapKo(winner) {
+  const m = match;
+  if (winner === 'a') tap.wins[0]++; else if (winner === 'b') tap.wins[1]++;
+  const champ = tap.wins[0] >= 2 ? 0 : tap.wins[1] >= 2 ? 1 : -1;
+  big(winner === 'draw' ? 'TABLA!' : `P${winner === 'a' ? 1 : 2} PANALO!`, `P1 ${tap.wins[0]} – ${tap.wins[1]} P2`, 2);
+  A.event({ type: 'done' });
+  setTimeout(() => {
+    if (match !== m) return;
+    if (champ < 0) { tap.round++; start(); return; }
+    // the series is won: a ceremony, then the results
+    mode = 'results';
+    $('results-title').textContent = `Panalo si P${champ + 1}!`;
+    $('results-score').textContent = `${tap.wins[0]} – ${tap.wins[1]}`;
+    $('results-best').textContent = 'Tapatan · pinakamahusay sa tatlo'; $('results-best').className = 'new';
+    const stat = (label, v) => `<div><span>${label}</span><b>${v}</b></div>`;
+    $('results-stats').innerHTML = stat('P1 padala', `${m.sent[0]} putik`) + stat('P2 padala', `${m.sent[1]} putik`) + stat('Ronda', tap.round) + stat('P1 hanay', m.a.lines) + stat('P2 hanay', m.b.lines) + stat('Oras', clock(m.tick));
+    $('results-xp').innerHTML = ''; $('results-medals').innerHTML = ''; $('results-stars').hidden = true; $('share').hidden = true; $('watch').hidden = true; $('next-job').hidden = true;
+    $('results-tip').textContent = `"Ganyan ang tapatan! Kamayan na kayo." — Kapatas`;
+    if (view) view.celebrate(); A.event({ type: 'ceremony' }); buzz([40, 30, 80]);
+    tap = null;
+    show('results');
+  }, 2300);
+}
+function openTapatan() {
+  mode = 'tapatan'; data.mode = 'tapatan';
+  const T = data.tap;
+  const seg = (k, p, list) => `<div class="modes">${list.map(([v, label]) => `<button type="button" data-tk="${k}" data-tp="${p}" data-v="${v}" aria-pressed="${String(T[k][p]) === String(v)}">${label}</button>`).join('')}</div>`;
+  const col = (p) => `<div class="grp"><h3 style="color:${p ? '#6fb3c4' : '#ffd23f'}">${icon(p ? 'keyb' : 'keyb', 22)} Manlalaro ${p + 1}</h3>
+    <p class="muted">Kontrol</p>${seg('src', p, p ? [['keys', 'Keyboard · Arrows'], ['pad0', 'Controller 1'], ['pad1', 'Controller 2']] : [['keys', 'Keyboard · WASD'], ['pad0', 'Controller 1']])}
+    <p class="muted">Padala × · Garbage sent</p>${seg('mult', p, [[0.5, '×0.5'], [1, '×1'], [1.5, '×1.5'], [2, '×2']])}
+    <p class="muted">Simulang taas · Start height</p>${seg('rubble', p, [[0, '0'], [2, '2'], [4, '4'], [6, '6']])}
+    <p class="muted">${p ? 'Arrows: galaw at bagsak (↑), , . ikot, / imbak' : 'A D galaw, S dahan, W bagsak, Q E ikot, C imbak'}</p></div>`;
+  const clash = T.src[0] !== 'keys' && T.src[0] === T.src[1];
+  $('tapatan-body').innerHTML = col(0) + col(1) + (clash ? `<p class="capnote warn">${icon('warn', 20)} Iisang controller ang dalawang manlalaro. Pumili ng iba.</p>` : '');
+  for (const b of $('tapatan-body').querySelectorAll('[data-tk]')) b.onclick = () => { const v = b.dataset.v; T[b.dataset.tk][+b.dataset.tp] = isNaN(+v) ? v : +v; persist(); openTapatan(); };
+  $('tap-go').disabled = clash;
+  show('tapatan');
+}
+$('tap-go').onclick = () => { tap = { wins: [0, 0], round: 1 }; data.mode = 'tapatan'; start(); };
+$('tap-keys').onclick = () => { remapTarget = 'p1'; openKeys(); };
 
 // ---------- replays: kept on the device, best Deadline, Karera and Daily, and the last game ----------
 const RKEY = 'hollowblocks.replays';
@@ -333,7 +403,7 @@ function retryLesson() { if (!lesson) return; data.mode = 'training'; start(); }
 const GENERIC = { start: ['Tara, laban!', 'Handa ka na ba?'], send: ['Ayan ang putik mo!', 'Tanggapin mo yan!'], hurt: ['Aray!', 'Ang galing mo, ah!'], danger: ['Patay, ang taas na!'], win: ['Sa susunod na lang!'], lose: ['Ang galing mo!'] };
 let rbubbleT = 0, rsayCool = 0;
 function rivalSays(kind, force = false) {
-  if (!match) return;
+  if (!match || match.local) return;
   if (!force && rsayCool > 0) return;
   const lines = (match.prof.says || GENERIC)[kind] || GENERIC[kind];
   const el = $('rbubble'); el.textContent = pick(lines); rbubbleT = 2.6; rsayCool = 3.5;
@@ -350,7 +420,8 @@ function onMatch(out) {
       if (e.from === 1 && e.sent >= 2) { rivalSays('send'); A.event({ type: 'rise' }); }
       if (e.from === 0 && e.n >= 3) rivalSays('hurt');
       if (e.from === 0 && e.sent > 0) buzz(20);
-    } else if (e.type === 'ko') {
+    } else if (e.type === 'ko' && match.local) { tapKo(e.winner); return; }
+    else if (e.type === 'ko') {
       rivalSays(e.winner === 'b' ? 'win' : 'lose', true);
       if (e.winner === 'a') { big('PANALO!', `Gumuho ang kay ${match.prof.name}`, 2); A.event({ type: 'done' }); }
       finishVersus(e.winner);
@@ -380,7 +451,7 @@ function big(title, sub = '', secs = 1.4) {
 }
 let bubbleT = 0, sayCool = 0, sinceI = 0, rankUp = null, rankT = 0;
 function say(k, force = false) {
-  if (!view) { if (R) R.say(k); return; }
+  if (!view) { if (R && SAYS[k]) R.say(k, pick(SAYS[k])); return; }
   if (!force && sayCool > 0) return;
   const el = $('bubble'); el.textContent = pick(SAYS[k]); bubbleT = 2.4; sayCool = 1.2;
   el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
@@ -408,15 +479,21 @@ function onEvent(e) {
     case 'tool': buzz(25); say('tool', true); break;
     case 'lindol': buzz([60, 40, 60]); say('lindol', true); break;
     case 'perfect': big('MALINIS!', 'Perfect clear', 1.6); break;
-    case 'gameover': say('over', true); if (lesson) verdict('fail'); else if (!match) finish(false); break;
-    case 'done': if (lesson) break; big('TAPOS!', 'Deadline met!', 2); say('done', true); finish(true); break;
+    case 'stamp': inspSays('stamp'); buzz(30); break;
+    case 'passed': inspSays('passed'); break;
+    case 'gust': hint('hangin', 'Hangin: dumudulas ang piraso sa direksyon ng hangin. Bantayan ang palaso!'); break;
+    case 'lights': if (!e.on) hint('brownout', 'Brownout! Ang flashlight lang ang ilaw: sundan ang piraso.'); break;
+    case 'crumble': hint('bitak', 'May bitak ang piraso: guguho ito pagkatapos ng ilang piraso.'); break;
+    case 'andamyo': big('ANDAMYO!', e.why === 'topout' ? 'Sinalo ng andamyo ang pader!' : 'Sinalo ang putik', 1.4); break;
+    case 'gameover': if (game && game.insp) inspSays('lost', true); say('over', true); if (lesson) verdict('fail'); else if (!match) finish(false); break;
+    case 'done': if (lesson) break; if (game && game.insp) inspSays('won', true); big('TAPOS!', game && game.mode === 'lingguhan' ? weeklyEvent().name : 'Deadline met!', 2); say('done', true); finish(true); break;
     default: break;
   }
 }
 
 function pause() { if (mode === 'play') { mode = 'pause'; show('pause'); } }
 function resume() { if (mode === 'pause') { mode = 'play'; clearInput(); show(null); } }
-function toMenu() { mode = 'title'; game = null; job = null; match = null; lesson = null; viewer = null; ghost = null; if (view) view.setVersus(false); labels(); show('title'); }
+function toMenu() { mode = 'title'; game = null; job = null; match = null; lesson = null; viewer = null; ghost = null; tap = null; if (view) view.setVersus(false); labels(); show('title'); }
 
 // ---------- input ----------
 let KEYS = {};
@@ -429,6 +506,11 @@ const playing = () => mode === 'play' && game;
 document.addEventListener('keydown', (e) => {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (capture && capture.kind === 'key') { e.preventDefault(); captured(k); return; }
+  if (match && match.local && (mode === 'play' || mode === 'pause')) {
+    // Tapatan: each key to its player
+    const r = tapRoutes.get(k);
+    if (r) { e.preventDefault(); if (r.act === 'pause') { if (mode === 'play') pause(); else resume(); } else if (mode === 'play') pressIn(tapIn[r.p], r.act, true, e.repeat); return; }
+  }
   const act = KEYS[k];
   if (act === 'pause' && (mode === 'play' || mode === 'pause')) { e.preventDefault(); if (mode === 'play') pause(); else resume(); return; }
   if (k === 'r' && mode === 'play' && lesson && act !== 'left' && act !== 'right') { retryLesson(); return; }
@@ -444,8 +526,12 @@ document.addEventListener('keydown', (e) => {
   if (mode === 'replay' && k === ' ') { e.preventDefault(); toggleViewer(); }
   if (k === 'm') toggleSound();
 });
-document.addEventListener('keyup', (e) => { const act = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key]; if (act && HELD.has(act)) held.delete(act); });
-window.addEventListener('blur', clearInput);
+document.addEventListener('keyup', (e) => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  const r = tapRoutes.get(k); if (r && r.act !== 'pause') pressIn(tapIn[r.p], r.act, false);
+  const act = KEYS[k]; if (act && HELD.has(act)) held.delete(act);
+});
+window.addEventListener('blur', () => { clearInput(); clearIn(tapIn[0]); clearIn(tapIn[1]); });
 
 // gestures on the board: tap to turn, drag sideways to shift, drag down to drop softly, flick down to
 // drop hard, flick up to hold
@@ -497,6 +583,12 @@ function readPad(dt) {
     for (let i = 0; i < Math.min(16, p.buttons.length); i++) if (edge(`cap${i}`, b(i)) && capture.armed) { captured(i); return; }
     capture.armed = true; return;
   }
+  if (playing() && match && match.local) {
+    // Tapatan: each player on a controller reads their own (1 or 2)
+    const pads = navigator.getGamepads ? [...navigator.getGamepads()].filter(Boolean) : [];
+    data.tap.src.forEach((src, pl) => { if (src.startsWith('pad')) padTo(pads[+src.slice(3)], tapIn[pl], `t${pl}:`); });
+    return;
+  }
   if (playing()) {
     const dirs = new Set([left && 'left', right && 'right', down && 'down'].filter(Boolean));
     for (const d of dirs) { if (!padHeldDirs.has(d) && d !== 'down') pressed.push(d); held.add(d); }
@@ -528,6 +620,15 @@ function readPad(dt) {
   if (edge('start', b(9))) { if (screen === 'pause') resume(); else if (screen === 'title') start(); }
 }
 
+// one controller into one player's input (Tapatan)
+function padTo(p, inp, ns) {
+  if (!p) return;
+  const b = (i) => !!(p.buttons[i] && p.buttons[i].pressed), ax = p.axes || [];
+  const edge = (name, on) => { const was = padWas[ns + name]; padWas[ns + name] = on; return on && !was; };
+  const dirs = { left: b(14) || (ax[0] || 0) < -0.5, right: b(15) || (ax[0] || 0) > 0.5, down: b(13) || (ax[1] || 0) > 0.6 };
+  for (const [d, on] of Object.entries(dirs)) { if (edge(d, on)) pressIn(inp, d, true); else if (!on) pressIn(inp, d, false); }
+  for (const [act, list] of Object.entries(data.pad)) { const on = list.some((i) => b(i)) || (act === 'hard' && list.includes(12) && (ax[1] || 0) < -0.7); if (edge(`p:${act}`, on)) { if (act === 'pause') pause(); else pressIn(inp, act, true); } }
+}
 function toggleSound() { A.start(); data.muted = !data.muted; A.setMuted(data.muted); persist(); labels(); }
 function labels() {
   for (const b of document.querySelectorAll('.sound')) { b.textContent = data.muted ? '🔇' : '🔊'; b.setAttribute('aria-label', data.muted ? 'Sound off, turn it on' : 'Sound on, turn it off'); }
@@ -539,20 +640,23 @@ function labels() {
     bagyo: 'Bagyo: tumataas ang putik mula sa ilalim. Tumagal hangga’t kaya!',
     karera: 'Karera: dalawang minuto, pinakamataas na kita. May gamit!',
     daily: `Daily ${dateKey()}: parehong mga piraso para sa lahat ngayong araw. Dalawang minuto.${data.daily[dateKey()] ? ` Best mo ngayon: ${peso(data.daily[dateKey()].score)}` : ''}`,
-    proyekto: `Proyekto: 15 kontrata sa 3 barangay. ${CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0)}/45 bituin.`,
+    proyekto: `Proyekto: ${CONTRACTS.length} kontrata sa ${BARANGAYS.length} barangay, dalawang kabanata. ${CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0)}/${CONTRACTS.length * 3} bituin.`,
+    tapatan: 'Tapatan: dalawang tao, isang keyboard. Pinakamahusay sa tatlong ronda, may handicap.',
+    lingguhan: `Lingguhan: ${weeklyEvent().name}. ${weeklyEvent().blurb}`,
     versus: `Laban: ang well mo laban sa kalaban, magpadala ng putik. Liga ng Barangay: ${data.vs.beaten.length}/${LADDER.length} natalo.`,
     training: `Pagsasanay: ${LESSONS.length} aralin ni Kapatas (T-spin, combo, finesse). ${data.lessons.length}/${LESSONS.length} pasado.`,
   }[data.mode];
   const rk = rankOf(data.xp);
   $('title-rank').textContent = `Ranggo: ${rk.name} · ${data.xp.toLocaleString('en-US')} XP${rk.next ? ` (${rk.need.toLocaleString('en-US')} pa para sa ${rk.next})` : ''} · ${data.medals.length}/${MEDALS.length} medalya`;
-  for (const b of document.querySelectorAll('[data-diff]')) b.disabled = ['daily', 'proyekto', 'versus', 'training'].includes(data.mode);
+  for (const b of document.querySelectorAll('[data-diff]')) b.disabled = ['daily', 'proyekto', 'versus', 'training', 'tapatan', 'lingguhan'].includes(data.mode);
+  weeklyBanner();
   $('diff-note').textContent = { madali: 'Madali: mas mabagal ang bagsak at mas matagal bago dumikit.', katamtaman: 'Katamtaman: ang klasiko.', mahirap: 'Mahirap: magsisimula sa ika-6 na palapag.' }[data.difficulty];
   const b = data.best[bestKey()];
-  $('title-best').textContent = ['proyekto', 'daily', 'versus', 'training'].includes(data.mode) ? '' : b ? `Best (${MODES[data.mode].name}, ${DIFFICULTY[data.difficulty].name}): ${data.mode === 'deadline' ? clock(b) : peso(b)}` : '';
+  $('title-best').textContent = ['proyekto', 'daily', 'versus', 'training', 'tapatan', 'lingguhan'].includes(data.mode) ? '' : b ? `Best (${MODES[data.mode].name}, ${DIFFICULTY[data.difficulty].name}): ${data.mode === 'deadline' ? clock(b) : peso(b)}` : '';
 }
 for (const b of document.querySelectorAll('.sound')) b.onclick = toggleSound;
 for (const b of document.querySelectorAll('[data-diff]')) b.onclick = () => { data.difficulty = b.dataset.diff; persist(); labels(); };
-for (const b of document.querySelectorAll('[data-mode]')) b.onclick = () => { data.mode = b.dataset.mode; job = null; vsPick = null; lesson = null; persist(); labels(); if (data.mode === 'proyekto') openMap(); else if (data.mode === 'versus') openVs(); else if (data.mode === 'training') openLessons(); };
+for (const b of document.querySelectorAll('[data-mode]')) b.onclick = () => { data.mode = b.dataset.mode; job = null; vsPick = null; lesson = null; persist(); labels(); if (data.mode === 'proyekto') openMap(); else if (data.mode === 'versus') openVs(); else if (data.mode === 'training') openLessons(); else if (data.mode === 'tapatan') openTapatan(); };
 
 // ---------- settings ----------
 let settingsFrom = 'title';
@@ -596,7 +700,7 @@ function openSettings(from) {
     else { o[k] = v; if (k === 'angle' && view) view.setAngled(v); }
     persist(); openSettings(settingsFrom);
   };
-  $('open-keys').onclick = openKeys;
+  $('open-keys').onclick = () => { remapTarget = 'solo'; openKeys(); };
   for (const r of $('settings-body').querySelectorAll('input[type=range]')) r.oninput = () => {
     if (r.dataset.k === 'r:das') { data.rules.das = +r.value ? +r.value : null; $('v-das').textContent = dasTxt(); persist(); return; }
     if (r.dataset.k === 'r:arr') { data.rules.arr = +r.value < 0 ? null : +r.value; $('v-arr').textContent = arrTxt(); persist(); return; }
@@ -609,12 +713,14 @@ for (const b of document.querySelectorAll('.settings-btn')) b.onclick = () => op
 function applyGfx() { if (view) view.setShadows(view.post.level > 0 || data.gfx !== 0); }
 
 // ---------- Proyekto: the stage map and the contract card ----------
-function openMap() {
-  mode = 'map'; job = null;
-  const total = CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0);
-  $('map-note').textContent = `${total}/45 ★ · Kailangan ng 8 ★ sa isang barangay para sa susunod.`;
-  $('map-body').innerHTML = BARANGAYS.map((name, b) => `<div class="card brgy"><h3>Brgy. ${name}<small>${brgyStars(data.stars, b)}/15 ★</small></h3>${CONTRACTS.filter((c) => c.brgy === b).map((c) => { const st = data.stars[c.id] || 0, open = unlocked(data.stars, c.id); return `<button type="button" class="job" data-job="${c.id}" ${open ? '' : 'disabled'}><span>${open ? '' : icon('lock', 18) + ' '}${c.name}</span><i>${'★'.repeat(st)}${'☆'.repeat(3 - st)}</i></button>`; }).join('')}</div>`).join('');
+let mapCh = 0;
+function openMap(ch = mapCh) {
+  mode = 'map'; job = null; mapCh = ch;
+  const total = CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0), open2 = chapterOpen(data.stars, 1);
+  $('map-note').innerHTML = `<span class="modes">${CHAPTERS.map((c, i) => `<button type="button" data-ch="${i}" aria-pressed="${i === ch}" ${i === 1 && !open2 ? 'disabled' : ''}>${i === 1 && !open2 ? icon('lock', 16) + ' ' : ''}${c.name}</button>`).join('')}</span><br>${total}/${CONTRACTS.length * 3} ★ · Kailangan ng 8 ★ sa isang barangay para sa susunod.${open2 ? '' : ' Kabanata 2: tapusin ang Ang Huling Bahay, o 30 ★.'}`;
+  $('map-body').innerHTML = CHAPTERS[ch].brgys.map((b) => [BARANGAYS[b], b]).map(([name, b]) => `<div class="card brgy"><h3>Brgy. ${name}<small>${brgyStars(data.stars, b)}/15 ★</small></h3>${CONTRACTS.filter((c) => c.brgy === b).map((c) => { const st = data.stars[c.id] || 0, open = unlocked(data.stars, c.id); return `<button type="button" class="job" data-job="${c.id}" ${open ? '' : 'disabled'}><span>${open ? '' : icon('lock', 18) + ' '}${c.name}</span><i>${'★'.repeat(st)}${'☆'.repeat(3 - st)}</i></button>`; }).join('')}</div>`).join('');
   for (const bt of $('map-body').querySelectorAll('[data-job]')) bt.onclick = () => openBrief(contractById(bt.dataset.job));
+  for (const bt of $('map-note').querySelectorAll('[data-ch]')) bt.onclick = () => openMap(+bt.dataset.ch);
   show('map');
 }
 function openBrief(c) {
@@ -723,40 +829,90 @@ $('watch').onclick = () => { if (replays.last) watch(replays.last.code); };
 
 // ---------- the controls: keys and controller buttons ----------
 const KEY_ACTS = ['left', 'right', 'down', 'hard', 'cw', 'ccw', 'r180', 'hold', 'tool', 'pause'], PAD_ACTS = ['cw', 'ccw', 'r180', 'hold', 'hard', 'tool', 'pause'];
+let remapTarget = 'solo'; // 'solo' or Tapatan's 'p1' / 'p2'
+const keyTarget = () => (remapTarget === 'p1' ? data.keys1 : remapTarget === 'p2' ? data.keys2 : data.keys);
+const otherTarget = () => (remapTarget === 'p1' ? data.keys2 : remapTarget === 'p2' ? data.keys1 : null);
 function openKeys() { mode = 'keys'; capture = null; drawKeys(); show('keys'); }
 function drawKeys() {
-  const map = data.keys, pm = data.pad;
+  const map = keyTarget(), pm = data.pad;
   const kRow = (a) => `<tr class="${capture && capture.kind === 'key' && capture.act === a ? 'cap' : ''} ${capture?.kind === 'key' && capture.clash?.other === a ? 'clash' : ''}"><td>${ACT_NAME[a]}</td><td>${map[a].map((k, i) => `<span class="kchip">${keyName(k)}<button type="button" data-rm="${a}:${i}" aria-label="Remove ${keyName(k)}">×</button></span>`).join('') || '<span class="muted">wala</span>'}</td><td><button type="button" class="add" data-cap="${a}">${capture && capture.kind === 'key' && capture.act === a ? 'Pindutin…' : '+ Dagdag'}</button></td></tr>`;
   const pRow = (a) => `<tr class="${capture && capture.kind === 'pad' && capture.act === a ? 'cap' : ''} ${capture?.kind === 'pad' && capture.clash?.other === a ? 'clash' : ''}"><td>${ACT_NAME[a]}</td><td>${pm[a].map((b) => `<span class="kchip">${PAD_NAME[b] || `#${b}`}</span>`).join('') || '<span class="muted">wala</span>'}</td><td><button type="button" class="add" data-pcap="${a}">${capture && capture.kind === 'pad' && capture.act === a ? 'Pindutin…' : 'Palitan'}</button></td></tr>`;
   let note = '<p class="capnote muted">Pumili ng aksyon, saka pindutin ang bagong key o button. Esc para kanselahin.</p>';
-  if (capture && capture.clash) note = `<p class="capnote warn">${icon('warn', 20)} Ang <b>${capture.kind === 'key' ? keyName(capture.clash.key) : PAD_NAME[capture.clash.key]}</b> ay gamit na ng <b>${ACT_NAME[capture.clash.other]}</b>. Ilipat dito sa ${ACT_NAME[capture.act]}?<button type="button" id="clash-yes">Ilipat · Move</button><button type="button" id="clash-no">Huwag · Cancel</button></p>`;
+  if (capture && capture.clash) note = `<p class="capnote warn">${icon('warn', 20)} Ang <b>${capture.kind === 'key' ? keyName(capture.clash.key) : PAD_NAME[capture.clash.key]}</b> ay gamit na ng <b>${capture.clash.theirs ? `${remapTarget === 'p1' ? 'P2' : 'P1'}: ` : ''}${ACT_NAME[capture.clash.other]}</b>. Ilipat dito sa ${ACT_NAME[capture.act]}?<button type="button" id="clash-yes">Ilipat · Move</button><button type="button" id="clash-no">Huwag · Cancel</button></p>`;
   else if (capture) note = `<p class="capnote">${icon(capture.kind === 'key' ? 'keyb' : 'pad', 20)} Pindutin ang ${capture.kind === 'key' ? 'key' : 'button sa controller'} para sa <b>${ACT_NAME[capture.act]}</b>… (Esc: kanselahin)</p>`;
-  $('keys-body').innerHTML = `<div><p class="h3g">${icon('keyb', 22)} Keyboard</p><table class="kt">${KEY_ACTS.map(kRow).join('')}</table></div><div><p class="h3g">${icon('pad', 22)} Controller</p><table class="kt">${PAD_ACTS.map(pRow).join('')}</table><p class="muted" style="margin-top:6px">Ang d-pad at kaliwang stick: galaw at dahan.</p></div>${note}`;
+  const tabs = `<div class="modes" style="grid-column:1/-1;justify-content:flex-start">${[['solo', 'Isahan · Solo'], ['p1', 'Tapatan · P1'], ['p2', 'Tapatan · P2']].map(([v, l]) => `<button type="button" data-rt="${v}" aria-pressed="${remapTarget === v}">${l}</button>`).join('')}</div>`;
+  $('keys-body').innerHTML = tabs + `<div><p class="h3g">${icon('keyb', 22)} Keyboard${remapTarget === 'solo' ? '' : ` · ${remapTarget.toUpperCase()}`}</p><table class="kt">${KEY_ACTS.map(kRow).join('')}</table></div><div><p class="h3g">${icon('pad', 22)} Controller</p><table class="kt">${PAD_ACTS.map(pRow).join('')}</table><p class="muted" style="margin-top:6px">Ang d-pad at kaliwang stick: galaw at dahan.</p></div>${note}`;
+  for (const b of $('keys-body').querySelectorAll('[data-rt]')) b.onclick = () => { remapTarget = b.dataset.rt; capture = null; drawKeys(); };
   for (const b of $('keys-body').querySelectorAll('[data-cap]')) b.onclick = () => { capture = { kind: 'key', act: b.dataset.cap }; drawKeys(); };
   for (const b of $('keys-body').querySelectorAll('[data-pcap]')) b.onclick = () => { capture = { kind: 'pad', act: b.dataset.pcap, armed: false }; drawKeys(); };
-  for (const b of $('keys-body').querySelectorAll('[data-rm]')) b.onclick = () => { const [a, i] = b.dataset.rm.split(':'); data.keys[a].splice(+i, 1); keymap(); persist(); drawKeys(); };
+  for (const b of $('keys-body').querySelectorAll('[data-rm]')) b.onclick = () => { const [a, i] = b.dataset.rm.split(':'); keyTarget()[a].splice(+i, 1); keymap(); tapKeys(); persist(); drawKeys(); };
   if ($('clash-yes')) { $('clash-yes').onclick = () => assign(capture.clash.key, true); $('clash-no').onclick = () => { capture = null; drawKeys(); }; }
 }
 // a key or button arrived for the action being changed: warn on a clash, else take it
 function captured(k) {
   if (!capture) return;
   if (capture.kind === 'key' && (k === 'Escape')) { capture = null; drawKeys(); return; }
-  const map = capture.kind === 'key' ? data.keys : data.pad;
+  const map = capture.kind === 'key' ? keyTarget() : data.pad;
   const other = Object.keys(map).find((a) => a !== capture.act && map[a].includes(k));
   if (other) { capture.clash = { key: k, other }; drawKeys(); return; }
+  // Tapatan: the other player's keys count too
+  const om = capture.kind === 'key' ? otherTarget() : null, theirs = om && Object.keys(om).find((a) => om[a].includes(k));
+  if (theirs) { capture.clash = { key: k, other: theirs, theirs: true }; drawKeys(); return; }
   assign(k, false);
 }
 function assign(k, move) {
-  const c = capture, map = c.kind === 'key' ? data.keys : data.pad;
+  const c = capture, map = c.kind === 'key' ? keyTarget() : data.pad;
   if (move) for (const a of Object.keys(map)) if (a !== c.act) map[a] = map[a].filter((x) => x !== k);
+  if (move && c.clash && c.clash.theirs) { const om = otherTarget(); for (const a of Object.keys(om)) om[a] = om[a].filter((x) => x !== k); }
   if (c.kind === 'key') { if (!map[c.act].includes(k)) { map[c.act].push(k); if (map[c.act].length > 3) map[c.act].shift(); } }
   else map[c.act] = [k];
-  capture = null; keymap(); persist(); drawKeys();
+  capture = null; keymap(); tapKeys(); persist(); drawKeys();
   toast(`${ACT_NAME[c.act]}: ${c.kind === 'key' ? keyName(k) : PAD_NAME[k]}`, 1600);
 }
-$('keys-ok').onclick = () => { capture = null; openSettings(settingsFrom); };
-$('keys-reset').onclick = () => { data.keys = validMap(null, DEF_KEYS, () => true); data.pad = validMap(null, DEF_PAD, () => true); capture = null; keymap(); persist(); drawKeys(); toast('Ibinalik sa default · Controls reset', 1600); };
+$('keys-ok').onclick = () => { capture = null; if (remapTarget !== 'solo' && data.mode === 'tapatan' && !game) { remapTarget = 'solo'; openTapatan(); return; } remapTarget = 'solo'; openSettings(settingsFrom); };
+$('keys-reset').onclick = () => { if (remapTarget === 'p1') data.keys1 = validMap(null, DEF_KEYS_P1, () => true); else if (remapTarget === 'p2') data.keys2 = validMap(null, DEF_KEYS_P2, () => true); else data.keys = validMap(null, DEF_KEYS, () => true); tapKeys(); data.pad = validMap(null, DEF_PAD, () => true); capture = null; keymap(); persist(); drawKeys(); toast('Ibinalik sa default · Controls reset', 1600); };
 keymap();
+
+// ---------- the weekly event: the banner on the title, with a countdown ----------
+function weeklyBanner() {
+  const w = weeklyEvent(), rec = data.weekly.week === w.week ? data.weekly : null;
+  $('weekly').innerHTML = `${icon('calendar', 40)}<div><small>Lingguhan · ${w.week}</small><b>${w.name}</b><span>${w.blurb}</span><em>${rec ? `Best: ${peso(rec.best || 0)} · ` : ''}Susunod: ${w.next.name} sa <i id="wk-left">${countdown(w.left)}</i></em></div><button type="button" class="${data.mode === 'lingguhan' ? 'primary' : ''}" id="wk-go">${icon('play', 16)} Laruin</button>`;
+  $('wk-go').onclick = () => { data.mode = 'lingguhan'; persist(); labels(); start(); };
+}
+setInterval(() => { const el = $('wk-left'); if (el && !$('title').hidden) el.textContent = countdown(weeklyEvent().left); }, 1000);
+// the plumada: the bot's best place for the piece in hand, while it lasts
+let plumbMemo = { k: '', cells: null };
+function plumbHint() {
+  if (!game || !game.plumb || !game.cur || game.phase !== 'play') return null;
+  const k = `${game.pieces}|${game.cur.type}`;
+  if (plumbMemo.k !== k) { const best = ranked(game.board, game.cur.type)[0]; plumbMemo = { k, cells: best ? cellsOf(best.land) : null }; }
+  return plumbMemo.cells;
+}
+// the Inspector's lines, in his own bubble, and his bar
+const INSP = {
+  enter: ['Inspeksyon! Tingnan natin ang trabaho mo.', 'Nasaan ang building permit?'],
+  stamp: ['REJECTED!', 'Hindi pasado ito!', 'Ayusin mo yan!', 'Ito, mali!'],
+  passed: ['Hmm. Pwede na.', 'Sige, pasado yan.'],
+  late: ['Malapit na ang deadline ng inspeksyon!', 'Tik-tak, tik-tak...'],
+  won: ['Pasado! Aprubado ang bahay.', 'Maganda ang trabaho. Pirmado na.'],
+  lost: ['Ipapasara ko ang site na ito!', 'Bagsak ang inspeksyon!'],
+};
+let ibubbleT = 0, isayCool = 0;
+function inspSays(kind, force = false) {
+  if (!force && isayCool > 0) return;
+  const el = $('ibubble'); el.textContent = pick(INSP[kind]); ibubbleT = 2.6; isayCool = 2.5;
+  el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+  if (!view) toast(`Inspektor: "${el.textContent}"`, 1800);
+}
+function inspHud(dt) {
+  const bar = $('inspbar'), g = game;
+  bar.hidden = !(g && g.insp && mode === 'play');
+  if (!bar.hidden) { const k = g.insp.bar / g.insp.max; bar.style.setProperty('--p', `${(k * 100).toFixed(1)}%`); bar.classList.toggle('late', k > 0.8); bar.querySelector('em').textContent = clock(Math.max(0, g.insp.max - g.insp.bar)); if (k > 0.8 && Math.random() < dt * 0.15) inspSays('late'); }
+  ibubbleT -= dt; isayCool -= dt;
+  const el = $('ibubble'), p = view ? view.inspHead() : { on: false }, on = ibubbleT > 0 && p.on && (mode === 'play' || mode === 'results');
+  el.hidden = !on;
+  if (on) { const hw = el.offsetWidth / 2 + 6; p.x = Math.max(hw, Math.min(innerWidth - hw, p.x)); el.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) translate(-50%, -100%)`; }
+}
 
 // ---------- the stats page: rank, totals, medals, the house style ----------
 function openStats() {
@@ -769,6 +925,10 @@ function openStats() {
     ${row(`Best Bahay (${DIFFICULTY[data.difficulty].name})`, best('bahay'))}${row('Best Deadline', best('deadline'))}${row('Best Bagyo', best('bagyo'))}${row('Best Karera', best('karera'))}${row('Bituin sa Proyekto', `${CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0)}/45`)}</table>
     <h3 style="margin:10px 0 4px;font:italic 900 18px 'Barlow Condensed';color:#ffd23f">MEDALYA ${data.medals.length}/${MEDALS.length}</h3>
     <div class="medals">${MEDALS.map((m) => `<div class="medal ${data.medals.includes(m.id) ? 'got' : ''}" title="${m.desc}"><b>★</b>${m.name}</div>`).join('')}</div>
+    <h3 style="margin:10px 0 4px;font:italic 900 18px 'Barlow Condensed';color:#ffd23f">LINGGUHAN · ${data.wmedals.length}/${WEEKLY_MEDALS.length} · ${icon('token', 18)} ${data.tokens} token</h3>
+    <div class="medals">${WEEKLY_MEDALS.map((m) => `<div class="medal ${data.wmedals.includes(m.id) ? 'got' : ''}" title="${m.desc}"><b>${icon('calendar', 24)}</b>${m.name}</div>`).join('')}</div>
+    <h3 style="margin:10px 0 4px;font:italic 900 18px 'Barlow Condensed';color:#ffd23f">GAMIT SA RANGGO</h3>
+    <div class="medals">${Object.entries(TOOL_RANK).map(([t, r]) => `<div class="medal ${rankOf(data.xp).index >= r ? 'got' : ''}" title="${RANKS[r].name}"><b>${icon(t, 28)}</b>${t[0].toUpperCase() + t.slice(1)} · ${RANKS[r].name}</div>`).join('')}</div>
     <h3 style="margin:10px 0 4px;font:italic 900 18px 'Barlow Condensed';color:#ffd23f">ISTILO NG BAHAY</h3>
     <div class="modes">${STYLES.map((x) => `<button type="button" data-style="${x.id}" aria-pressed="${data.style === x.id}" ${styleOpen(data.xp, x.id) ? '' : 'disabled'}>${styleOpen(data.xp, x.id) ? x.name : icon('lock', 16) + ' ' + x.name + ' · ' + RANKS[x.rank].name}</button>`).join('')}</div>`;
   for (const bt of $('stats-body').querySelectorAll('[data-style]')) bt.onclick = () => { data.style = bt.dataset.style; persist(); if (view) view.setHouseStyle(data.style); openStats(); };
@@ -781,7 +941,7 @@ $('how-btn').onclick = () => { mode = 'how'; show('how'); };
 $('how-ok').onclick = () => toMenu();
 $('play').onclick = start;
 $('safety-ok').onclick = () => { data.safety = true; persist(); start(); };
-$('retry').onclick = start;
+$('retry').onclick = () => { if (data.mode === 'tapatan') tap = { wins: [0, 0], round: 1 }; start(); };
 $('resume').onclick = resume;
 $('pause-btn').onclick = pause;
 for (const b of document.querySelectorAll('.menu')) b.onclick = toMenu;
@@ -800,6 +960,16 @@ function hud(g) {
     }
   }
   const m = match || (viewer && viewer.pb.rec.head.vs ? viewer.pb.g : null);
+  if (m && m.local && tap) {
+    const k = `tap|${m.sent[0]}|${m.sent[1]}|${tap.wins}|${tap.round}|${Math.floor(m.tick / 30)}`;
+    if (k === hudKey) return;
+    hudKey = k;
+    const dots = (n) => '●'.repeat(n) + '○'.repeat(2 - n);
+    $('h-score').querySelector('small').textContent = `P1 · ${dots(tap.wins[0])}`; $('h-score').querySelector('b').textContent = `${m.sent[0]} putik`;
+    $('h-mode').querySelector('b').textContent = 'TAPATAN'; $('h-mode').querySelector('em').textContent = `Ronda ${tap.round} · ${clock(m.tick)}`;
+    $('h-best').querySelector('small').textContent = `P2 · ${dots(tap.wins[1])}`; $('h-best').querySelector('b').textContent = `${m.sent[1]} putik`;
+    return;
+  }
   if (m) {
     // Laban: what you sent, the match, what the rival sent
     const k = `vs|${m.sent[0]}|${m.sent[1]}|${pendingRows(m.a)}|${pendingRows(m.b)}|${Math.floor(m.tick / 30)}`;
@@ -869,10 +1039,12 @@ function frame(now) {
       if (coach) { const f = coachTick(coach, inp, evs, game); if (f && (lesson || data.rules.coach)) showFinesse(f); if (lesson) verdict(judge(lesson, game, evs, f)); }
       else if (lesson) verdict(judge(lesson, game, evs, null));
     };
-    if (match) onMatch(matchStep(match, input, dt * k, onTick));
+    if (match && match.local) onMatch(matchStep(match, AUTOPLAY ? input : drain(tapIn[0]), dt * k, null, AUTOPLAY ? bot(match.b, { pace: 6 }) : drain(tapIn[1])));
+    else if (match) onMatch(matchStep(match, input, dt * k, onTick));
     else for (const e of step(game, input, dt * k, onTick)) onEvent(e);
     hud(game);
     ghostHud();
+    inspHud(dt);
     let top = 99; for (let i = 0; i < game.board.length; i++) if (game.board[i]) { top = Math.floor(i / 10); break; }
     highCool -= dt; if (top < 7 && game.phase === 'play' && highCool <= 0) { highCool = 9; say(top < 5 ? 'brink' : 'high', top < 5); }
   } else if (viewer && mode === 'replay') {
@@ -901,7 +1073,7 @@ function frame(now) {
   const vmode = mode === 'play' || mode === 'replay' ? 'play' : mode === 'pause' ? 'pause' : mode === 'results' ? 'results' : mode === 'safety' ? 'safety' : 'title';
   const nextN = viewer ? (viewer.pb.rec.head.opts?.next || 5) : data.rules.next;
   if (view) {
-    view.frame(g, dt, { mode: vmode, reduced: reduced(), cine: data.opt.cine && !match && !lesson && !viewer, ghost: data.opt.ghost, rival: rivalG, hint: lessonHint(), next: nextN, onThunder: () => A.thunder(), onCeremony: (n) => { big('BAHAY NA!', `${n} palapag · Salamat, bayanihan!`, 2.4); say('ceremony', true); A.event({ type: 'ceremony' }); } });
+    view.frame(g, dt, { mode: vmode, reduced: reduced(), cine: data.opt.cine && !match && !lesson && !viewer, ghost: data.opt.ghost, rival: rivalG, p2: !!(match && match.local), hint: lessonHint(), plumb: plumbHint(), next: nextN, onThunder: () => A.thunder(), onCeremony: (n) => { big('BAHAY NA!', `${n} palapag · Salamat, bayanihan!`, 2.4); say('ceremony', true); A.event({ type: 'ceremony' }); } });
     // the rival's bubble over its scaffold
     rbubbleT -= dt; rsayCool -= dt;
     const rb = $('rbubble'), rp = view.rivalHead(), ron = rbubbleT > 0 && (mode === 'play' || mode === 'results') && rp.on && !!match;
@@ -913,7 +1085,7 @@ function frame(now) {
     el.hidden = !on;
     if (on) { const hw = el.offsetWidth / 2 + 6; p.x = Math.max(hw, Math.min(innerWidth - hw, p.x)); el.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) translate(-50%, -100%)`; el.style.opacity = String(Math.min(1, bubbleT / 0.3)); }
     bigT -= dt; if (bigT <= 0) $('big').hidden = true;
-  } else R.draw(g, t, { reduced: reduced(), best: game ? data.best[bestKey()] || 0 : 0, rival: rivalG, hint: lessonHint(), next: nextN });
+  } else R.draw(g, t, { reduced: reduced(), best: game ? data.best[bestKey()] || 0 : 0, rival: rivalG, hint: lessonHint(), plumb: plumbHint(), next: nextN });
   A.update(g, (!!game && mode === 'play') || (!!viewer && !viewer.paused), dt);
   requestAnimationFrame(frame);
 }
@@ -958,9 +1130,11 @@ async function boot() {
   if (TEST) {
     // fast-forward for soak tests: n ticks of the bot, drawing a frame every 20
     const fast = (n) => { for (let k = 0; k < n; k++) { const g = game; if (!g || mode !== 'play') break; for (const e of step(g, bot(g, { pace: 1 }), 1 / 60, (inp) => { if (rec) record(rec, inp); })) onEvent(e); if (view && k % 20 === 19) view.frame(g, 1 / 3, { mode: 'play', reduced: reduced(), cine: data.opt.cine, ghost: true }); } return game && game.lines; };
+    // Tapatan with a bot on each side
+    const fastTap = (n) => { for (let k = 0; k < n; k++) { if (!match || mode !== 'play' || match.phase !== 'play') break; onMatch(matchStep(match, bot(match.a, { pace: 4 }), 1 / 60, null, bot(match.b, { pace: 6, style: 'tetris' }))); if (view && k % 20 === 19) view.frame(game, 1 / 3, { mode: 'play', reduced: reduced(), cine: false, ghost: true, rival: match.b, p2: true, next: data.rules.next }); } return match && match.tick; };
     // the same for a match: the bot plays your well too
     const fastVs = (n) => { for (let k = 0; k < n; k++) { if (!match || mode !== 'play' || match.phase !== 'play') break; const out = matchStep(match, bot(match.a, { pace: 4 }), 1 / 60, (inp) => { if (rec) record(rec, inp); }); onMatch(out); if (view && k % 20 === 19) view.frame(game, 1 / 3, { mode: 'play', reduced: reduced(), cine: false, ghost: true, rival: match.b, next: data.rules.next }); } return match && match.tick; };
-    window.__hb = { fast, fastVs, A, get game() { return game; }, get match() { return match; }, get mode() { return mode; }, get demo() { return demo; }, get viewer() { return viewer; }, get coach() { return coach; }, get ghost() { return ghost; }, replays, start, get view() { return view; }, pause, resume, openSettings: () => openSettings(mode === 'pause' ? 'pause' : 'title'), openKeys, openVs, openRival, openLessons, openLesson: (id) => openLesson(lessonById(id)), openReplays, watch, encodeLast: async () => rec && encode(rec), keepReplay: () => keepReplay(game, true), data, showFinesse, setRec: (r) => { rec = r; } };
+    window.__hb = { job: (id) => openBrief(contractById(id)), fastTap, openTapatan, get tap() { return tap; }, tapIn, openMap, weeklyBanner, inspSays, fast, fastVs, A, get game() { return game; }, get match() { return match; }, get mode() { return mode; }, get demo() { return demo; }, get viewer() { return viewer; }, get coach() { return coach; }, get ghost() { return ghost; }, replays, start, get view() { return view; }, pause, resume, openSettings: () => openSettings(mode === 'pause' ? 'pause' : 'title'), openKeys, openVs, openRival, openLessons, openLesson: (id) => openLesson(lessonById(id)), openReplays, watch, encodeLast: async () => rec && encode(rec), keepReplay: () => keepReplay(game, true), data, showFinesse, setRec: (r) => { rec = r; } };
     if (Q.get('rival')) { vsPick = Q.get('rival'); }
     if (Q.get('lesson')) lesson = lessonById(Q.get('lesson'));
     if (Q.get('difficulty')) data.difficulty = Q.get('difficulty');

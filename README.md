@@ -32,7 +32,10 @@
 - **Karera:** two minutes, the most kita wins.
 - **Daily:** two minutes on the same pieces as everyone else today (by Manila date), with your best kept and a spoiler-free result to share.
 - **Laban (versus):** your well and a rival's, side by side on the site; the rival's scaffold stands on a raised deck next to yours, its name on a board on top. Clears send mud rows with one gap: 2 rows send 1, 3 send 2, a Bayanihan 4, a T-spin double 4 (single 2, triple 6), back-to-back adds 1, combos add more the longer they run, and a perfect clear sends 10. Incoming mud stacks up as sacks beside your well (amber while it waits, red once it's armed, after half a second) and comes up the next time a piece locks without a clear, at most eight rows at once; your own clears cancel it first. Play a quick match against **Baguhan**, **Bihasa** or **Kapatas**, or climb the **Liga ng Barangay**: six rivals (Totoy Bato, Aling Nena, Mang Berto, Bebang Bilis, Engr. Dado and Kapatas Rodel), each with a pace, a mistake rate, a style (a clean stacker, a Bayanihan builder, a speedster, a T-spinner) and their own trash talk. Each one you beat opens the next, and the ladder is saved.
+- **Tapatan (two players, desktop):** two people on one computer, on the same versus rules. Player 1 plays on A/D/S/W with Q/E to turn and C to hold, player 2 on the arrows with , . to turn and / to hold; either can use a controller instead (or both, on two controllers), and every key can be remapped per player. Best of three rounds, with a round banner between them and a ceremony for the winner. Handicaps per player: how much mud their attacks send (×0.5 to ×2) and how many rows of rubble they start with. Hidden on phones.
+- **Lingguhan (weekly event):** a twist for each ISO week (Manila time), the same for everyone, with no server: Bagyo Week, Lindol Week, Gamit Lang (every fourth piece banks a tool), Mabilis (20G: pieces fall at once) and Retro (no hold, no ghost, one next piece, no wall kicks). A banner on the title shows this week's event and counts down to the next. Each is three minutes for the most kita; finishing one earns its medal, and the first finish of a week banks a token (to spend in a later update).
 - **Pagsasanay (training):** Kapatas's lessons: T-spin single, double and triple, the 4-wide combo, and finesse. Each has a set board, an instruction card, a gold ghost showing where the piece should go, a retry (R), and a pass check. The lessons teach what the hard contracts need, and the Diskarte, Sunod-sunod and Tatlong T-spin cards link to them.
+- **Proyekto, Kabanata 2 (Sa Lungsod):** fifteen more contracts in Sta. Lucia, Maligaya and Bagumbayan, opened by finishing Ang Huling Bahay or by 30 stars. The new twists: **Brownout** (the well goes dark but for a flashlight cone on the piece, with the lights coming back now and then), **Hangin** (the piece drifts a column with the wind, and the gust turns), **Bitak** (every few pieces is cracked and crumbles a few placements later), **Lunes** (no kawayan at all), and **limited tools** (only the tools the contract hands you). The finale is the **City Inspector**: he walks in from the street, paces beside the well with his clipboard, stamps a REJECTED block on top of a column every few seconds, mud rises on a timer, and his inspection bar fills; finish three floors before it does. Clearing a stamp pushes his bar back three seconds.
 - **Proyekto:** fifteen contracts across three barangays (San Roque, Malinta, Bagong Silang), each a job order from Kapatas with a goal and a twist: clear rows with only two holds, reach a floor against the clock, make T-spins, outlast the mud, clear a messy foundation in few pieces, earn ₱6,000 while a **lindol** (earthquake) slides the stack sideways every 30 seconds. Finishing earns a star, beating the par two or three; each contract opens the next, and 8 stars open the next barangay.
 
 ## Replays and the ghost
@@ -51,6 +54,11 @@ In Bahay, Karera and Proyekto, every 8 to 12 pieces one comes with a glowing **t
 - **Kreyn** swaps the piece for a kawayan, lowered on its hook.
 - **Pison** rolls across and flattens every column to the median height.
 - **Merienda** halves gravity for 15 seconds, with a clock over the well.
+
+Three more open with rank:
+- **Plumada** (plumb bob, from Kapatas): a blue ghost and a plumb bob show the best place for each of the next three pieces, chosen by the bot.
+- **Barena** (drill, from Inhinyero): drills out the whole column under the middle of the piece.
+- **Andamyo** (scaffolding, from Arkitekto): a hazard-striped scaffold floor goes up under the stack; it takes the next mud (a Bagyo row or a versus attack), or one top-out (the top of the stack comes down onto it), then breaks.
 
 Tools are off in Deadline, Bagyo and the Daily, so those results stay comparable.
 
@@ -85,11 +93,18 @@ Tests (Node 20+): `node --test test/*.test.mjs`.
   - versus: the mud table, cancelling, armed mud coming up with one gap per attack, the ladder, the rivals getting harder, and a whole match replaying identically from its seed and your inputs (`test/versus.test.mjs`)
   - replays: Deadline, Karera and Daily runs (with rule options) replay to the exact final state and score, and the bytes and share text round-trip (`test/replay.test.mjs`)
   - training: each lesson's solution, played key by key, passes its check and a wrong move fails it; the finesse minimums for a sample of placements (`test/training.test.mjs`)
+  - chapter 2: every twist, the Inspector's stamps, bar and relief, the unlock, and the bot earning a star on at least two of three seeds of every contract (`test/chapter2.test.mjs`)
+  - the weekly event: the week to event mapping, ISO weeks, the countdown, and each event's rules (`test/weekly.test.mjs`)
+  - the rank tools, and a game with the old toolset playing exactly as before (`test/tools2.test.mjs`)
+  - Tapatan: keys routed to each player, each player's input reaching only their well, the handicaps, and a whole match replaying from both inputs (`test/tapatan.test.mjs`)
+  - every module parses (`test/syntax.test.mjs`)
   - rule options: no options plays exactly as before; DAS, ARR, soft drop, hold off, the queue length, and the 180° turn with its kicks (`test/options.test.mjs`)
 - **The offline cache:** every module, three.js and the sounds are precached.
 - **Sanity floors:** from a bot (`src/bot.mjs`) that scores every placement with the classic El-Tetris weights. For versus it also finds T-spins (soft drop, then a last turn into a three-corner slot) and, in the T-spinner style, keeps T-slots open; the rivals are this bot, paced and given a mistake rate (`src/versus.mjs`).
 
 **How v6 is built:** the rules stay pure. `src/versus.mjs` steps two games in lockstep and moves the mud; `src/replay.mjs` records, packs and plays back; `src/training.mjs` holds the lessons, a path finder for their solutions, and the finesse table (the fewest taps, holds and turns to each column and turn on an open board); `src/rival3d.mjs` builds the rival's scaffold, deck and mud sacks.
+
+**v7:** chapter 2's twists, the Inspector, the weekly rulesets and the rank tools are all in the pure rules (`src/game.mjs`; events and toolsets in `src/progress.mjs`). `src/controls.mjs` routes keys to players. `src/inspector3d.mjs` is the Inspector, made in code like the neighbours. The view draws the brownout as a dark pane with a soft hole and a light cone, cracks as decals, and player 2's hold and next on a board beside their scaffold. In the wind the bot steers to its target instead of replaying keys, which is what sets chapter 2's pars.
 
 The music is an original tune. Made by [Lemmuel Turaya](https://kon2raya.netlify.app).
 

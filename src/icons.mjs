@@ -22,6 +22,16 @@ const P = {
   blueprint: (i) => `<path d="M7 9h28l6 6v24H7z" fill="#3a6aa8"/><path d="M13 16h16M13 22h22M13 28h10M27 28h8v6h-8z" fill="none" stroke="#e8f0ff" stroke-width="2.2"/>`,
   pad: (i) => `<path d="M8 18c2-5 8-6 16-6s14 1 16 6l4 14c1 5-5 7-8 3l-4-5H16l-4 5c-3 4-9 2-8-3z" fill="url(#s${i})"/><path d="M14 20v8M10 24h8" stroke="${INK}" stroke-width="3"/><circle cx="32" cy="21" r="2.5" fill="url(#r${i})"/><circle cx="36" cy="26" r="2.5" fill="url(#g${i})"/>`,
   keyb: (i) => `<path d="M4 14h40v22H4z" fill="url(#s${i})"/><path d="M9 19h4v4H9zM16 19h4v4h-4zM23 19h4v4h-4zM30 19h4v4h-4zM37 19h3v4h-3zM12 29h24v3H12z" fill="${INK}" stroke="none"/>`,
+  plumada: (i) => `<path d="M24 4v14" stroke="${INK}" stroke-width="2.5"/><path d="M14 18h20l-10 26z" fill="url(#g${i})"/><path d="M18 18h12" stroke="#fff" stroke-opacity=".6" stroke-width="2"/><circle cx="24" cy="5" r="3" fill="url(#s${i})"/>`,
+  barena: (i) => `<path d="M6 16h20v12H6z" fill="url(#r${i})"/><path d="M10 28h8l-2 14h-4z" fill="url(#r${i})"/><path d="M26 18h6v8h-6z" fill="url(#s${i})"/><path d="M32 20l12 2-12 2z" fill="url(#s${i})"/><path d="M34 19l2 6M38 20l1 4" stroke="${INK}" stroke-width="1.5"/>`,
+  andamyo: (i) => `<path d="M8 6v38M40 6v38" stroke="url(#s${i})" stroke-width="5"/><path d="M8 16l32 10M40 16L8 26" stroke="#c9c768" stroke-width="3.5"/><path d="M4 34h40v6H4z" fill="url(#g${i})"/>`,
+  duo: (i) => `<circle cx="16" cy="16" r="7" fill="url(#g${i})"/><circle cx="33" cy="16" r="7" fill="#6fb3c4"/><path d="M5 40c1-8 5-12 11-12s10 4 11 12z" fill="url(#g${i})"/><path d="M22 40c1-8 5-12 11-12s10 4 11 12z" fill="#6fb3c4"/>`,
+  calendar: (i) => `<path d="M7 11h34v31H7z" fill="#fff8e1"/><path d="M7 11h34v9H7z" fill="url(#r${i})"/><path d="M15 6v8M33 6v8" stroke="${INK}" stroke-width="3.5" stroke-linecap="round"/><path d="M14 27h6v6h-6z" fill="url(#g${i})"/><path d="M24 27h6v6h-6zM14 35h6v4h-6z" fill="#c8c0b0" stroke="none"/>`,
+  stamp: (i) => `<path d="M18 6h12v14H18z" fill="url(#s${i})"/><path d="M10 20h28v8H10z" fill="#7a3a1a"/><path d="M8 32h32v10H8z" fill="url(#r${i})"/><path d="M13 37h22" stroke="#fff" stroke-width="2"/>`,
+  flashlight: (i) => `<path d="M6 20h18l6-6h6v20h-6l-6-6H6z" fill="url(#s${i})"/><path d="M36 14l8-6v32l-8-6z" fill="url(#g${i})" fill-opacity=".85"/>`,
+  wind: (i) => `<path d="M6 16h24a5 5 0 1 0-5-5M6 26h32a5 5 0 1 1-5 5M6 36h16" fill="none" stroke="url(#s${i})" stroke-width="4" stroke-linecap="round"/>`,
+  crack: (i) => `<path d="M8 8h32v32H8z" fill="#a4a8a6"/><path d="M22 8l-4 10 8 6-6 8 4 8M26 24l10-4" fill="none" stroke="${INK}" stroke-width="2.5"/>`,
+  token: (i) => `<circle cx="24" cy="24" r="18" fill="url(#g${i})"/><circle cx="24" cy="24" r="12" fill="none" stroke="#a8541c" stroke-width="2.5"/><path d="M18 22h12v8H18zM20 18h8v4h-8z" fill="#a8541c" stroke="none"/>`,
   replay: (i) => `<path d="M24 8a16 16 0 1 1-15 10" fill="none" stroke="url(#g${i})" stroke-width="5" stroke-linecap="round"/><path d="M4 10l6 10 8-7z" fill="url(#g${i})"/><path d="M20 17l11 7-11 7z" fill="url(#r${i})"/>`,
 };
 let n = 0;

@@ -2,7 +2,7 @@
 // rises), the kawayan scaffolding round the board, every block in its material, the ghost, the hold
 // and the queue, Kapatas and his remarks, and the juice: dust, words, and the Bayanihan parade.
 import { COLS, ROWS, HIDDEN, VISIBLE, CLEAR_T, cellsOf, ghostOf } from './game.mjs';
-import { SHAPES, MATERIALS, ID, MUD, CEMENT } from './pieces.mjs';
+import { SHAPES, MATERIALS, ID, MUD, CEMENT, REJECTED } from './pieces.mjs';
 
 export const C = 24, BX = 96, BY = 52, W = 432, H = 560;
 const TYPE_OF = Object.fromEntries(Object.entries(ID).map(([t, v]) => [v, t]));
@@ -41,10 +41,10 @@ export function createRenderer(canvas) {
     if (sprites.has(v)) return sprites.get(v);
     const c = document.createElement('canvas'); c.width = C * 2; c.height = C * 2;
     const m = c.getContext('2d'); m.scale(2, 2);
-    const mat = MATERIALS[v === MUD || v === CEMENT ? v : TYPE_OF[v]];
+    const mat = MATERIALS[v === MUD || v === CEMENT || v === REJECTED ? v : TYPE_OF[v]];
     m.fillStyle = mat.dark; m.fillRect(0, 0, C, C);
     m.fillStyle = mat.color; m.fillRect(1, 1, C - 2, C - 3);
-    const t = v === MUD ? 'MUD' : v === CEMENT ? 'CEMENT' : TYPE_OF[v];
+    const t = v === MUD ? 'MUD' : v === CEMENT ? 'CEMENT' : v === REJECTED ? 'REJ' : TYPE_OF[v];
     switch (t) {
       case 'I': // kawayan: nodes and a shine
         m.fillStyle = 'rgba(255,255,255,0.3)'; m.fillRect(3, 1, 3, C - 3);
@@ -78,6 +78,7 @@ export function createRenderer(canvas) {
         m.fillStyle = 'rgba(255,255,255,0.18)'; m.fillRect(1, 1, C - 2, 2);
         break;
       case 'CEMENT': m.fillStyle = 'rgba(255,255,255,0.18)'; m.fillRect(1, 1, C - 2, 3); break;
+      case 'REJ': m.fillStyle = '#fff'; m.font = '900 6px sans-serif'; m.textAlign = 'center'; m.fillText('REJECTED', C / 2, C / 2 + 2); break;
       default: // putik
         m.fillStyle = mat.dark; for (const [a, b, r] of [[6, 7, 3], [16, 12, 4], [9, 17, 2.5], [19, 5, 2]]) { m.beginPath(); m.arc(a, b, r, 0, TAU); m.fill(); }
     }
@@ -101,7 +102,7 @@ export function createRenderer(canvas) {
   // ---------- effects ----------
   const emit = (p) => { if (parts.length < (reduced ? 120 : 400)) parts.push({ g: 0, drag: 0.94, size: 2, ...p, max: p.life }); };
   const popup = (text, x, y, color, size = 16, life = 1.2) => popups.push({ text, x, y, color, size, life, max: life });
-  const say = (k) => { bubble = { text: pick(SAYS[k]), life: 2.4 }; };
+  const say = (k, text) => { if (!text && !SAYS[k]) return; bubble = { text: text || pick(SAYS[k]), life: 2.4 }; }; // the page can hand over its own line
 
   function event(e, g) {
     switch (e.type) {
@@ -272,7 +273,7 @@ export function createRenderer(canvas) {
       const c = 6, x0 = W - 76, y0 = BY + 262;
       box(W - 84, y0 - 8, 76, VISIBLE * c + 26, 'KALABAN');
       ctx.fillStyle = '#26232c'; ctx.fillRect(x0, y0 + 8, COLS * c, VISIBLE * c);
-      for (let y = HIDDEN; y < ROWS; y++) for (let x = 0; x < COLS; x++) { const v = rg.board[y * COLS + x]; if (v) { const m = MATERIALS[v === MUD || v === CEMENT ? v : TYPE_OF[v]]; ctx.fillStyle = m.color; ctx.fillRect(x0 + x * c, y0 + 8 + (y - HIDDEN) * c, c - 0.5, c - 0.5); } }
+      for (let y = HIDDEN; y < ROWS; y++) for (let x = 0; x < COLS; x++) { const v = rg.board[y * COLS + x]; if (v) { const m = MATERIALS[v === MUD || v === CEMENT || v === REJECTED ? v : TYPE_OF[v]]; ctx.fillStyle = m.color; ctx.fillRect(x0 + x * c, y0 + 8 + (y - HIDDEN) * c, c - 0.5, c - 0.5); } }
       if (rg.cur) for (const [x, y] of cellsOf(rg.cur)) if (y >= HIDDEN) { ctx.fillStyle = MATERIALS[rg.cur.type].color; ctx.fillRect(x0 + x * c, y0 + 8 + (y - HIDDEN) * c, c - 0.5, c - 0.5); }
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -310,6 +311,7 @@ export function createRenderer(canvas) {
       if (!v) continue;
       ctx.drawImage(block(v), BX + x * C, cellY(y), C, C);
       if (over) { ctx.fillStyle = 'rgba(40,36,44,0.55)'; ctx.fillRect(BX + x * C, cellY(y), C, C); }
+      if (g.cracks && g.cracks.some((c) => c.x === x && c.y === y)) { ctx.strokeStyle = 'rgba(20,14,10,0.8)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(BX + x * C + 6, cellY(y) + 2); ctx.lineTo(BX + x * C + 11, cellY(y) + 11); ctx.lineTo(BX + x * C + 8, cellY(y) + 20); ctx.stroke(); }
     }
     if (clearing) {
       const f = g.phaseT / CLEAR_T;
@@ -326,8 +328,16 @@ export function createRenderer(canvas) {
       }
     }
     // the lesson's target, and the mud waiting to come up (Laban)
+    const plumb = opts.plumb;
+    if (plumb && g.phase === 'play') { ctx.strokeStyle = 'rgba(127,216,255,0.9)'; ctx.lineWidth = 2.5; for (const [x, y] of plumb) if (y >= HIDDEN) ctx.strokeRect(BX + x * C + 2, cellY(y) + 2, C - 4, C - 4); }
     if (opts.hint && g.phase === 'play') { ctx.strokeStyle = `rgba(255,210,63,${0.6 + 0.3 * Math.sin(t * 5)})`; ctx.lineWidth = 2.5; for (const [x, y] of opts.hint) if (y >= HIDDEN) ctx.strokeRect(BX + x * C + 2, cellY(y) + 2, C - 4, C - 4); }
     if (g.incoming && g.incoming.length) { let row = 0; for (const e of g.incoming) for (let k = 0; k < e.n && row < VISIBLE; k++, row++) { ctx.fillStyle = e.t <= 0 ? '#e8402a' : '#b8862a'; ctx.fillRect(BX - 9, BY + (VISIBLE - 1 - row) * C + 2, 6, C - 3); } }
+    // brownout: dark but for a pool of light on the piece
+    if (g.dark && g.dark.on && g.phase !== 'over') {
+      const c = g.cur ? cellsOf(g.cur) : [[4, 12]], px = BX + (c.reduce((a, [x]) => a + x, 0) / c.length + 0.5) * C, py = cellY(c.reduce((a, [, y]) => a + y, 0) / c.length) + C / 2;
+      const gr = ctx.createRadialGradient(px, py, C * 1.2, px, py, C * 3.4); gr.addColorStop(0, 'rgba(4,4,8,0)'); gr.addColorStop(1, 'rgba(4,4,8,0.93)');
+      ctx.fillStyle = gr; ctx.fillRect(BX, BY, COLS * C, VISIBLE * C);
+    }
     // rain in a bagyo
     if (g.mode === 'bagyo') {
       while (rain.length < (reduced ? 40 : 120)) rain.push({ x: Math.random() * W, y: Math.random() * H, v: rnd(380, 520) });

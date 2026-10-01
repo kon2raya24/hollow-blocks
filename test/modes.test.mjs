@@ -173,7 +173,7 @@ test('contract goals end the game as done; a time limit fails it; a hold limit i
 });
 
 test('every contract is well formed, and the stars follow the par', () => {
-  assert.equal(CONTRACTS.length, 15);
+  assert.equal(CONTRACTS.length, 30); // 15 in each chapter
   for (const c of CONTRACTS) {
     assert.ok(c.goal && Object.keys(c.goal).length, c.id);
     const lower = c.star.by === 'time' || c.star.by === 'pieces';

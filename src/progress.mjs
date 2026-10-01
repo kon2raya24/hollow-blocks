@@ -1,3 +1,4 @@
+import { TOOLS } from './game.mjs';
 // Progression, pure: XP from every game, the ranks (Peon to Arkitekto), the medals, the house styles
 // each rank unlocks, the stats, and the Daily's date seed and spoiler-free share text.
 export const RANKS = [
@@ -56,3 +57,34 @@ export function shareText(key, r) {
   const bricks = Math.max(1, Math.min(10, Math.round(r.lines / 4)));
   return `Hollow Blocks Daily ${key}\n₱${Math.floor(r.score).toLocaleString('en-US')} · ${r.lines} hanay${r.bayanihan ? ` · ${r.bayanihan}× Bayanihan` : ''}\n${'🧱'.repeat(bricks)}\nhttps://hollow-blocks.vercel.app`;
 }
+
+// ---------- tools by rank: the plumada at Kapatas, the barena at Inhinyero, the andamyo at Arkitekto ----------
+export const TOOL_RANK = { plumada: 2, barena: 3, andamyo: 4 };
+export function toolsetFor(xp) { const r = rankOf(xp).index; return [...TOOLS, ...Object.keys(TOOL_RANK).filter((t) => r >= TOOL_RANK[t])]; }
+
+// ---------- the weekly event: one twist a week by the ISO week (Manila time), the same for everyone ----------
+// Each is three minutes for the most kita on a twisted ruleset; finishing one earns its medal, and the
+// first finish of a week banks a token (spent in a later update).
+export const EVENTS = [
+  { id: 'bagyo', name: 'Bagyo Week', blurb: 'Tumataas ang putik buong linggo. Tatlong minuto, pinakamataas na kita.', contract: { rise: { start: 540, fastest: 240, step: 15 } } },
+  { id: 'lindol', name: 'Lindol Week', blurb: 'Lumilindol tuwing 20 segundo: dumudulas ang tumpok.', contract: { lindol: 20 * 60 } },
+  { id: 'gamit', name: 'Gamit Lang', blurb: 'Tools only: bawat ikaapat na piraso, may bagong gamit.', contract: { tools: true, toolEvery: 4 } },
+  { id: 'mabilis', name: 'Mabilis', blurb: '20G: bumabagsak agad ang bawat piraso. Bilis ng isip!', contract: { g20: true } },
+  { id: 'retro', name: 'Retro', blurb: 'Lumang patakaran: walang imbak, walang anino, isang susunod lang, walang wall kick.', contract: { retro: true } },
+];
+export const WEEKLY_MEDALS = EVENTS.map((e) => ({ id: `wk-${e.id}`, name: e.name, desc: `Natapos ang ${e.name}` }));
+const DAY = 86400e3, EPOCH = Date.UTC(2026, 0, 5); // a Monday (ISO week 2 of 2026)
+// the Monday (Manila) a time falls in, as a UTC day number
+const mondayOf = (now) => { const d = Math.floor((now + 8 * 3600e3) / DAY) * DAY, wd = (new Date(d).getUTCDay() + 6) % 7; return d - wd * DAY; };
+export function isoWeek(now = Date.now()) {
+  const d = new Date(mondayOf(now) + 3 * DAY); // the week's Thursday decides its year
+  const y = d.getUTCFullYear(), jan4 = Date.UTC(y, 0, 4), wk = 1 + Math.round((mondayOf(d.getTime() - 8 * 3600e3) - mondayOf(jan4 - 8 * 3600e3)) / (7 * DAY));
+  return `${y}-W${String(wk).padStart(2, '0')}`;
+}
+export function weeklyEvent(now = Date.now()) {
+  const n = Math.round((mondayOf(now) - EPOCH) / (7 * DAY));
+  const ev = EVENTS[((n % EVENTS.length) + EVENTS.length) % EVENTS.length];
+  const ends = mondayOf(now) + 7 * DAY - 8 * 3600e3; // next Monday, midnight in Manila
+  return { ...ev, week: isoWeek(now), ends, left: ends - now, next: EVENTS[(((n + 1) % EVENTS.length) + EVENTS.length) % EVENTS.length] };
+}
+export function countdown(ms) { const s = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60); return d ? `${d}a ${h}o` : h ? `${h}o ${m}m` : `${m}m ${s % 60}s`; }

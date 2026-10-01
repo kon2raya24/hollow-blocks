@@ -26,8 +26,31 @@ export const CONTRACTS = [
   { id: 'bs3', brgy: 2, name: 'Bagyo at Lindol', brief: 'Dalawang minuto: putik mula sa ilalim, lindol tuwing 30 segundo.', goal: { survive: 120 * SEC }, rise: { start: 480, fastest: 260, step: 15 }, lindol: 30 * SEC, star: { by: 'lines', two: 28, three: 45 } },
   { id: 'bs4', brgy: 2, name: 'Tatlong T-spin', brief: 'Tatlong T-spin bago matapos ang 4 na minuto.', goal: { tspins: 3 }, limit: 4 * MIN, star: { by: 'time', two: 210, three: 150 } },
   { id: 'bs5', brgy: 2, name: 'Ang Huling Bahay', brief: 'Apat na palapag (40 hanay) sa 5 minuto, simula sa ika-3.', goal: { lines: 40 }, limit: 5 * MIN, startLevel: 3, star: { by: 'time', two: 170, three: 105 } },
+  // ---------- Chapter 2: the city's edge. Opens once Ang Huling Bahay is done, or with 30 stars. ----------
+  // Pars come from the bot at the same pace as chapter 1 (.scratch/ch2-par.mjs).
+  // Barangay Sta. Lucia: the weather and the power
+  { id: 'sl1', brgy: 3, name: 'Brownout', brief: 'Nawalan ng kuryente! Flashlight lang ang ilaw. Labindalawang hanay.', goal: { lines: 12 }, brownout: { dark: 15 * SEC, light: 4 * SEC }, star: { by: 'time', two: 40, three: 25 } },
+  { id: 'sl2', brgy: 3, name: 'Habagat', brief: 'Malakas ang hangin: dumudulas ang piraso. Labinlimang hanay.', goal: { lines: 15 }, wind: { every: 75, gust: 5 }, star: { by: 'time', two: 58, three: 36 } },
+  { id: 'sl3', brgy: 3, name: 'Bitak', brief: 'Mahina ang semento: bawat ikaapat na piraso ay may bitak at guguho. Labinlimang hanay.', goal: { lines: 15 }, bitak: { every: 4, life: 6 }, star: { by: 'time', two: 50, three: 32 } },
+  { id: 'sl4', brgy: 3, name: 'Lunes ng Umaga', brief: 'Lunes: walang dumating na kawayan. Dalawampung hanay nang walang I.', goal: { lines: 20 }, noI: true, star: { by: 'time', two: 62, three: 40 } },
+  { id: 'sl5', brgy: 3, name: 'Gabi ng Habagat', brief: 'Brownout at hangin nang sabay. Labingwalong hanay.', goal: { lines: 18 }, brownout: { dark: 12 * SEC, light: 4 * SEC }, wind: { every: 90, gust: 6 }, star: { by: 'time', two: 66, three: 42 } },
+  // Barangay Maligaya: making do
+  { id: 'mg1', brgy: 4, name: 'Tipid sa Gamit', brief: 'Isang martilyo at isang semento lang ang dala mo. Linisin ang kalat.', goal: { garbage: true }, garbage: 8, startTools: ['martilyo', 'semento'], toolboxes: false, tools: true, star: { by: 'pieces', two: 36, three: 24 } },
+  { id: 'mg2', brgy: 4, name: 'Bagyo sa Lunes', brief: 'Walang kawayan, at tumataas ang putik. Tumagal nang 90 segundo.', goal: { survive: 90 * SEC }, noI: true, rise: { start: 480, fastest: 260, step: 15 }, star: { by: 'lines', two: 34, three: 52 } },
+  { id: 'mg3', brgy: 4, name: 'Lumang Pundasyon', brief: 'Bitak na ang lumang pundasyon. Linisin ang pitong hanay ng kalat.', goal: { garbage: true }, garbage: 7, bitak: { every: 3, life: 5 }, tools: false, star: { by: 'pieces', two: 130, three: 40 } },
+  { id: 'mg4', brgy: 4, name: 'Bagyong Hangin', brief: 'Dalawampu’t limang hanay sa 3 minuto, sa gitna ng malakas na hangin.', goal: { lines: 25 }, limit: 3 * MIN, wind: { every: 70, gust: 5 }, star: { by: 'time', two: 85, three: 54 } },
+  { id: 'mg5', brgy: 4, name: 'Kandila', brief: 'Brownout buong gabi. Kumita ng ₱8,000.', goal: { score: 8000 }, brownout: { dark: 20 * SEC, light: 3 * SEC }, star: { by: 'time', two: 80, three: 52 } },
+  // Barangay Bagumbayan: the permit
+  { id: 'bg1', brgy: 5, name: 'Isang Pison', brief: 'Tatlumpung hanay habang tumataas ang putik; isang pison lang ang gamit mo.', goal: { lines: 30 }, startTools: ['pison'], toolboxes: false, tools: true, rise: { start: 600, fastest: 300, step: 10 }, star: { by: 'time', two: 85, three: 55 } },
+  { id: 'bg2', brgy: 5, name: 'Lunes at Lindol', brief: 'Walang kawayan, at lumilindol tuwing 25 segundo. Dalawampung hanay.', goal: { lines: 20 }, noI: true, lindol: 25 * SEC, star: { by: 'time', two: 70, three: 44 } },
+  { id: 'bg3', brgy: 5, name: 'Bitak sa Bagyo', brief: 'Dalawang minuto: putik mula sa ilalim, at may bitak ang bawat ikalimang piraso.', goal: { survive: 120 * SEC }, bitak: { every: 5, life: 6 }, rise: { start: 480, fastest: 260, step: 15 }, star: { by: 'lines', two: 42, three: 62 } },
+  { id: 'bg4', brgy: 5, name: 'Dilim at Kalat', brief: 'Brownout, at anim na hanay ng kalat. Linisin, tipid sa piraso.', goal: { garbage: true }, garbage: 6, brownout: { dark: 14 * SEC, light: 4 * SEC }, tools: false, star: { by: 'pieces', two: 26, three: 14 } },
+  { id: 'bg5', brgy: 5, name: 'Ang Inspektor', boss: true, brief: 'Dumating ang City Inspector. Tatlong palapag (30 hanay) bago mapuno ang inspeksyon. Ang bawat REJECTED na malinis mo, may dagdag na oras.', goal: { lines: 30 }, startLevel: 3, inspector: { every: 6 * SEC, bar: 150 * SEC, relief: 3 * SEC }, rise: { start: 540, fastest: 360, step: 8 }, star: { by: 'time', two: 85, three: 53 } },
 ];
-export const BARANGAYS = ['San Roque', 'Malinta', 'Bagong Silang'];
+export const BARANGAYS = ['San Roque', 'Malinta', 'Bagong Silang', 'Sta. Lucia', 'Maligaya', 'Bagumbayan'];
+export const CHAPTERS = [{ name: 'Kabanata 1', brgys: [0, 1, 2] }, { name: 'Kabanata 2 · Sa Lungsod', brgys: [3, 4, 5] }];
+// Chapter 2 opens when chapter 1's last contract is done, or with 30 of its 45 stars.
+export const chapterOpen = (progress, ch) => ch === 0 || (progress.bs5 || 0) > 0 || CONTRACTS.filter((c) => c.brgy < 3).reduce((a, c) => a + (progress[c.id] || 0), 0) >= 30;
 export const contractById = (id) => CONTRACTS.find((c) => c.id === id) || null;
 
 // Stars for a finished contract: 0 if it failed, else 1, 2 or 3 by its par.
@@ -43,6 +66,7 @@ export function unlocked(progress, id) {
   const i = CONTRACTS.findIndex((c) => c.id === id);
   if (i <= 0) return i === 0;
   const c = CONTRACTS[i], prev = CONTRACTS[i - 1];
+  if (c.brgy === 3 && prev.brgy === 2) return chapterOpen(progress, 1);
   if (prev.brgy !== c.brgy) return brgyStars(progress, prev.brgy) >= 8;
   return (progress[prev.id] || 0) > 0;
 }
@@ -63,6 +87,12 @@ export function describe(c) {
   if (c.rise) tw.push('tumataas ang putik');
   if (c.lindol) tw.push('lindol');
   if (c.startLevel) tw.push(`ika-${c.startLevel} palapag`);
+  if (c.brownout) tw.push('brownout');
+  if (c.wind) tw.push('hangin');
+  if (c.bitak) tw.push(`bitak bawat ${c.bitak.every}`);
+  if (c.noI) tw.push('walang kawayan');
+  if (c.startTools) tw.push(`gamit: ${c.startTools.join(', ')} lang`);
+  if (c.inspector) tw.push('City Inspector');
   if (c.tools === false) tw.push('walang gamit');
   const s = c.star, unit = s.by === 'time' ? 's' : s.by === 'pieces' ? ' piraso' : s.by === 'lines' ? ' hanay' : '';
   return { goal: out.join(' · '), twist: tw.join(' · '), par: `★★ ${s.by === 'time' || s.by === 'pieces' ? '≤' : '≥'} ${s.two}${unit} · ★★★ ${s.by === 'time' || s.by === 'pieces' ? '≤' : '≥'} ${s.three}${unit}` };

@@ -57,6 +57,12 @@ export function buildRivalRig(scene) {
 
   net.userData.keep = true;
   mergeStatic(group); // a few draw calls for the whole scaffold
+  // Tapatan: a board beside the well for player 2's hold and next pieces
+  const p2board = new THREE.Group();
+  const p2face = new THREE.Mesh(new THREE.BoxGeometry(1.7, 6.8, 0.05), [plank, plank, plank, plank, new THREE.MeshStandardMaterial({ color: '#2a1e18', roughness: 0.9 }), plank]);
+  p2face.castShadow = true; p2board.add(p2face);
+  p2board.add(pole(V(-0.85, 2.6, 0), V(-1.0, 2.6, 0), 0.02, steel), pole(V(-0.85, -2.6, 0), V(-1.0, -2.6, 0), 0.02, steel));
+  p2board.position.set(x1 + 1.35, BASE_Y + 12.2 * CS, 0.25); p2board.visible = false; group.add(p2board);
   // the gauges: sacks of mud, instanced, one stack beside each well (0: yours, 1: the rival's)
   const sackGeo = new THREE.CylinderGeometry(0.12, 0.14, CS * 0.86, 10, 1); sackGeo.rotateZ(Math.PI / 2); sackGeo.scale(1, 1, 0.8);
   const sackM = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.85, emissive: '#ff3a10', emissiveIntensity: 0 });
@@ -79,6 +85,7 @@ export function buildRivalRig(scene) {
     setName(name, tag, color) { signM.map = nameTex(name, tag, color); signM.needsUpdate = true; },
     place(rx, s, lift, z) { Object.assign(this, { RX: rx, S: s, LIFT: lift, Z: z }); group.position.set(rx, lift, z); group.scale.setScalar(s); buildDeck(rx, s, lift, z); },
     show(on) { group.visible = on; sacks.visible = on; deck.visible = on; },
+    showP2(on) { p2board.visible = on; },
     // gauges: [{ x, s, y, z, list: incoming entries }] in world units
     gauges(list, dt, t) {
       sacks.count = 0;

@@ -130,8 +130,18 @@ export function createAudio({ base = 'assets/sfx/' } = {}) {
           else if (e.tool === 'semento') { hiss(0.9, 500, 0.12, 0.2, 'lowpass', 160); play('soft', 0.6, 0.6, 0.35); play('soft', 0.5, 0.75, 0.7); }
           else if (e.tool === 'kreyn') { for (let k = 0; k < 6; k++) play('tin', 0.25, 1.4 + k * 0.05, k * 0.08); tone(220, 0.6, 'sawtooth', 0.02, 0.1, 1.5); play('metal', 0.4, 1.1, 0.6); }
           else if (e.tool === 'pison') { hiss(1.1, 120, 0.2, 0, 'lowpass', 90); tone(48, 1.1, 'sawtooth', 0.05, 0, 0.8); for (let k = 0; k < 5; k++) play('mining', 0.35, 0.7, 0.15 + k * 0.17); }
+          else if (e.tool === 'plumada') { [84, 88, 91].forEach((n, i) => tone(NOTE(n), 0.35, 'sine', 0.05, i * 0.12)); play('glass', 0.3, 1.6, 0.1); }
+          else if (e.tool === 'barena') { tone(140, 1.0, 'sawtooth', 0.05, 0, 1.6); hiss(1.0, 2400, 0.08, 0, 'bandpass', 1800); for (let k = 0; k < 6; k++) play('mining', 0.25, 1.2, 0.1 + k * 0.14); }
+          else if (e.tool === 'andamyo') { for (let k = 0; k < 4; k++) play('metal', 0.35, 0.9 + k * 0.1, k * 0.12); play('wood', 0.4, 0.8, 0.5); }
           else { play('bell', 0.4, 1.2); [79, 76, 72, 67].forEach((n, i) => tone(NOTE(n), 0.3, 'triangle', 0.05, 0.15 + i * 0.22)); for (let k = 0; k < 6; k++) tone(1800, 0.03, 'square', 0.02, 0.9 + k * (0.18 + k * 0.05)); }
           break;
+        case 'stamp': play('heavy', 0.5, 1.3); tone(90, 0.12, 'square', 0.06); play('plank', 0.4, 0.7, 0.04); break;
+        case 'passed': [72, 76].forEach((n, i) => tone(NOTE(n), 0.14, 'triangle', 0.05, i * 0.08)); break;
+        case 'wind': hiss(0.35, 900, 0.04, 0, 'bandpass', 500); break;
+        case 'gust': hiss(1.1, 600, 0.09, 0, 'bandpass', 300); break;
+        case 'crumble': play('mining', 0.4, 1.1); hiss(0.4, 1200, 0.05, 0, 'lowpass', 400); break;
+        case 'lights': if (e.on) { tone(880, 0.05, 'square', 0.03); tone(1320, 0.05, 'square', 0.03, 0.06); } else { tone(220, 0.4, 'sawtooth', 0.04, 0, 0.4); } break;
+        case 'andamyo': for (let k = 0; k < 5; k++) play(k % 2 ? 'wood' : 'metal', 0.45, 0.7 + Math.random() * 0.3, k * 0.07); hiss(0.6, 700, 0.12, 0, 'lowpass', 300); break;
         case 'toolEarned': play('glass', 0.4, 1.4); [72, 79, 84].forEach((n, i) => tone(NOTE(n), 0.12, 'triangle', 0.05, i * 0.07)); break;
         case 'lindol': hiss(1.6, 90, 0.35, 0, 'lowpass', 40); tone(36, 1.4, 'sawtooth', 0.07, 0, 0.7); for (let k = 0; k < 4; k++) play('mining', 0.3, 0.6, 0.2 + k * 0.25); break;
         case 'perfect': [72, 76, 79, 84, 88].forEach((n, i) => tone(NOTE(n), 0.2, 'square', 0.04, i * 0.08)); play('bell', 0.35, 1.5, 0.3); break;

@@ -48,11 +48,15 @@ export const rivalById = (id) => LADDER.find((r) => r.id === id) || LEVELS[id] |
 // The ladder opens one rival at a time: each needs the one before beaten.
 export const ladderOpen = (beaten, id) => { const i = LADDER.findIndex((r) => r.id === id); return i === 0 || (i > 0 && beaten.includes(LADDER[i - 1].id)); };
 
-export function createMatch({ seed = 1, rival = 'baguhan', opts = null } = {}) {
-  const prof = rivalById(rival) || LEVELS.baguhan;
-  const a = createGame({ seed, mode: 'versus', difficulty: 'katamtaman', opts }); // the same pieces for both
-  const b = createGame({ seed, mode: 'versus', difficulty: 'katamtaman' });
-  return { seed, rival: prof.id, prof, a, b, ai: { rs: (seed * 1103515245 + 4242) >>> 0, piece: -1, keys: [], wait: 0 }, tick: 0, acc: 0, phase: 'play', winner: null, sent: [0, 0], got: [0, 0] };
+// Tapatan (local, two people): local true, and the second well takes input2 instead of the bot. The
+// handicaps: mult (what each side's attacks are worth, fractions carried over) and rubble (rows of mud
+// each side starts with). opts2 is the second player's rule options.
+export const P2 = { id: 'p2', name: 'Manlalaro 2', tag: 'P2', color: '#6fb3c4' };
+export function createMatch({ seed = 1, rival = 'baguhan', opts = null, local = false, opts2 = null, mult = [1, 1], rubble = [0, 0] } = {}) {
+  const prof = local ? P2 : rivalById(rival) || LEVELS.baguhan;
+  const side = (o, n) => createGame({ seed, mode: 'versus', difficulty: 'katamtaman', opts: o, contract: n ? { garbage: n, tools: false } : null }); // the same pieces for both
+  const a = side(opts, rubble[0]), b = side(local ? opts2 : null, rubble[1]);
+  return { seed, rival: prof.id, prof, local, a, b, mult: mult.slice(), frac: [0, 0], ai: { rs: (seed * 1103515245 + 4242) >>> 0, piece: -1, keys: [], wait: 0 }, tick: 0, acc: 0, phase: 'play', winner: null, sent: [0, 0], got: [0, 0] };
 }
 
 // The rival's keys for this tick: plan a placement when a piece arrives (now and then a worse one), wait
@@ -75,16 +79,19 @@ function rivalInput(m) {
 }
 
 // One tick of the match: both wells, then the mud crosses. Returns each side's events and the match's.
-export function matchTick(m, input = NOINPUT) {
+export function matchTick(m, input = NOINPUT, input2 = NOINPUT) {
   const out = { a: [], b: [], x: [] };
   if (m.phase !== 'play') return out;
   m.tick++;
   out.a = tick(m.a, input);
-  out.b = tick(m.b, rivalInput(m));
+  out.b = tick(m.b, m.local ? input2 : rivalInput(m));
   for (const [side, evs] of [[0, out.a], [1, out.b]]) {
     const me = side ? m.b : m.a, them = side ? m.a : m.b;
     for (const e of evs) {
-      const atk = e.type === 'lines' ? attackFor(e) : e.type === 'perfect' ? ATTACK.perfect : 0;
+      const raw = e.type === 'lines' ? attackFor(e) : e.type === 'perfect' ? ATTACK.perfect : 0;
+      if (!raw) continue;
+      const k = m.mult ? m.mult[side] : 1, v = raw * k + (m.frac ? m.frac[side] : 0), atk = Math.floor(v + 1e-9);
+      if (m.frac) m.frac[side] = v - atk;
       if (!atk) continue;
       const left = cancel(me, atk);
       if (left > 0) { receive(them, left); m.sent[side] += left; m.got[1 - side] += left; }
@@ -101,16 +108,17 @@ export function matchTick(m, input = NOINPUT) {
 }
 
 // The page's step: real time in, whole ticks out (like step() in the rules); onTick sees your input.
-export function matchStep(m, input = NOINPUT, dt = 1 / 60, onTick = null) {
+export function matchStep(m, input = NOINPUT, dt = 1 / 60, onTick = null, input2 = NOINPUT) {
   m.inbox = { held: input.held || [], pressed: [...(m.inbox?.pressed || []), ...(input.pressed || [])] };
+  m.inbox2 = { held: input2.held || [], pressed: [...(m.inbox2?.pressed || []), ...(input2.pressed || [])] };
   m.acc += Math.min(dt, 0.1);
   const out = { a: [], b: [], x: [] };
   while (m.acc >= 1 / 60 - 1e-9) {
     m.acc -= 1 / 60;
-    const r = matchTick(m, m.inbox);
-    if (onTick) onTick(m.inbox, r.a);
+    const r = matchTick(m, m.inbox, m.inbox2);
+    if (onTick) onTick(m.inbox, r.a, m.inbox2, r.b);
     out.a.push(...r.a); out.b.push(...r.b); out.x.push(...r.x);
-    m.inbox = { held: m.inbox.held, pressed: [] };
+    m.inbox = { held: m.inbox.held, pressed: [] }; m.inbox2 = { held: m.inbox2.held, pressed: [] };
   }
   return out;
 }

@@ -13,6 +13,10 @@
 // Laban (versus) adds the rival's scaffold beside yours (rival3d.mjs) and draws its game there, with a
 // stack of mud sacks by each well for the rows waiting to come up; the camera widens to take in both.
 // Pagsasanay (training) draws the lesson's target as a pulsing gold ghost.
+//
+// Chapter 2: a brownout darkens the well but for a flashlight cone on the piece; the wind blows dust
+// across; cracked blocks show grey and shake before they crumble; the City Inspector walks the site
+// (inspector3d.mjs) and his stamps land in red. The plumada's hint is a blue ghost under a plumb bob.
 import * as THREE from './vendor/three.module.min.js';
 import { COLS, ROWS, HIDDEN, CLEAR_T, READY, cellsOf, ghostOf } from './game.mjs';
 import { SHAPES } from './pieces.mjs';
@@ -28,6 +32,7 @@ import { buildCrowd } from './crowd.mjs';
 import { createToolFx } from './toolfx.mjs';
 import { TOOLS } from './game.mjs';
 import { buildRivalRig } from './rival3d.mjs';
+import { createInspector } from './inspector3d.mjs';
 
 const TAU = Math.PI * 2;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -132,6 +137,28 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   // the lesson's target: a gold outline that breathes
   const hintM = new THREE.MeshBasicMaterial({ map: ghostTexture(), transparent: true, depthWrite: false, toneMapped: false, color: '#ffd23f' });
   const hintMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(CS * 1.0, CS * 1.0, CS * 0.86), hintM, 4); hintMesh.count = 0; hintMesh.frustumCulled = false; hintMesh.renderOrder = 4; scene.add(hintMesh);
+  // brownout: a dark pane over the well with a soft hole where the flashlight falls, and the beam
+  const darkU = { c: { value: new THREE.Vector2() }, k: { value: 0 }, r: { value: 1.3 } };
+  const darkM = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, depthTest: false, uniforms: darkU,
+    vertexShader: 'varying vec2 vw; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vw = w.xy; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: 'uniform vec2 c; uniform float k, r; varying vec2 vw; void main(){ float d = length((vw - c) * vec2(1.0, 0.8)); float a = smoothstep(r * 0.55, r * 1.25, d); gl_FragColor = vec4(0.01, 0.012, 0.02, a * 0.93 * k); }' });
+  const darkPane = new THREE.Mesh(new THREE.PlaneGeometry(WELL.x1 - WELL.x0 + 0.5, WELL.top - WELL.y0 + 0.6), darkM);
+  darkPane.position.set(0, (WELL.y0 + WELL.top) / 2, 0.5); darkPane.renderOrder = 6; darkPane.visible = false; scene.add(darkPane);
+  const beamM = new THREE.MeshBasicMaterial({ color: '#fff2c8', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+  const beamG = new THREE.ConeGeometry(1, 1, 24, 1, true); beamG.translate(0, -0.5, 0);
+  const beam = new THREE.Mesh(beamG, beamM); beam.renderOrder = 7; beam.visible = false; scene.add(beam);
+  const torch = new THREE.SpotLight('#fff0d0', 0, 14, 0.38, 0.6, 1.2); scene.add(torch, torch.target);
+  let darkK = 0;
+  // bitak: a crack decal on the face of each cracked cell
+  const crackTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); x.strokeStyle = 'rgba(16,10,6,0.95)'; x.lineCap = 'round'; x.lineJoin = 'round';
+    const branch = (px, py, a, len, w) => { if (len < 8 || w < 1) return; const nx = px + Math.cos(a) * len, ny = py + Math.sin(a) * len; x.lineWidth = w; x.beginPath(); x.moveTo(px, py); x.lineTo(nx, ny); x.stroke(); branch(nx, ny, a + 0.6, len * 0.62, w * 0.7); branch(nx, ny, a - 0.5, len * 0.55, w * 0.65); };
+    x.strokeStyle = 'rgba(255,240,220,0.55)'; x.translate(2, 2); branch(64, 4, 1.5, 44, 12); branch(64, 4, 1.95, 34, 8); branch(10, 72, -0.25, 40, 8); x.setTransform(1, 0, 0, 1, 0, 0);
+    x.strokeStyle = 'rgba(16,10,6,0.95)'; branch(64, 4, 1.5, 44, 11); branch(64, 4, 1.95, 34, 7); branch(10, 72, -0.25, 40, 7);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  const cracks = new THREE.InstancedMesh(new THREE.PlaneGeometry(CS * 0.9, CS * 0.9), new THREE.MeshBasicMaterial({ map: crackTex, transparent: true, depthWrite: false, toneMapped: false, color: '#ffffff' }), 60);
+  cracks.count = 0; cracks.frustumCulled = false; cracks.renderOrder = 2; scene.add(cracks);
+  // the City Inspector, made when a job needs him
+  let insp = null;
   const m4 = new THREE.Matrix4(), q0 = new THREE.Quaternion(), qa = new THREE.Quaternion(), ea = new THREE.Euler(), vp = new THREE.Vector3(), vs = new THREE.Vector3(), cW = new THREE.Color();
   function put(key, x, y, z, s = 1, glow = 0, tint = 1, rot = null) {
     const im = blocks[key]; if (!im || im.count >= MAXB) return;
@@ -165,7 +192,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   const bolt = { mesh: null, t: 0 };
   let todNow = { ...TOD.golden }, todKey = 'golden', todTo = null, todK = 0, stormOn = false, hazeOn = false;
 
-  function resetState() { orient = new Uint8Array(COLS * ROWS); pending = null; collapsed = false; riseT = 0; cine = null; fx.clear(); site.resetBunting(); }
+  function resetState() { orient = new Uint8Array(COLS * ROWS); pending = null; collapsed = false; riseT = 0; cine = null; fx.clear(); site.resetBunting(); if (insp) insp.leave(); }
   // the rival's well (a match): its own orientation memory, clears and rises
   let rig = null, vsOn = false;
   const R = { g: null, orient: new Uint8Array(COLS * ROWS), pending: null, riseT: 0, collapsed: false };
@@ -347,6 +374,24 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         if (g.mode === 'bahay' && (1 + Math.floor(g.lines / 10)) % 5 === 0) { site.raiseBunting(); cheerT = 4.5; reactKapatas('victory'); fx.confetti(0, WELL.top + 2, 1, 200); fx.confetti(hx, hy + 4, hz + 2, 120); if (o0.onCeremony) o0.onCeremony(1 + Math.floor(g.lines / 10)); }
         break;
       }
+      case 'stamp': {
+        if (!insp) insp = createInspector(scene);
+        insp.stamp(cx(e.x));
+        fx.callout('REJECTED!', cx(e.x), cy(e.y) + 0.5, 1.3, { color: 'pink', height: 0.6, life: 1.2, delay: 0.45 });
+        for (let k = 0; k < 10; k++) fx.puff(cx(e.x), cy(e.y), 0.4, '#e8a090', { size: rnd(0.2, 0.4), vx: rnd(-1, 1), vy: rnd(0, 1), vz: rnd(0.3, 1), life: 0.7, a: 0.5 });
+        if (!reduced) { kickV -= 0.03; flashK = Math.max(flashK, 0.08); }
+        break;
+      }
+      case 'passed': fx.callout(`PASADO +${3 * e.n}s`, 0, WELL.top - 2, 1.3, { color: 'green', height: 0.6, life: 1.2 }); break;
+      case 'lights': if (e.on) { fx.callout('MAY ILAW NA!', 0, WELL.top - 1.6, 1.3, { color: 'gold', height: 0.6, life: 1 }); if (!reduced) flashK = Math.max(flashK, 0.1); } else fx.callout('BROWNOUT!', 0, WELL.top - 1.6, 1.3, { color: 'blue', height: 0.8, life: 1.2 }); break;
+      case 'wind': case 'gust': {
+        const d = e.dir;
+        for (let k = 0; k < (e.type === 'gust' ? 40 : 12); k++) fx.puff(-d * rnd(2.5, 3.5), rnd(0.5, 10.5), rnd(0.3, 0.9), '#d8ccb0', { size: rnd(0.15, 0.35), vx: d * rnd(5, 9), vy: rnd(-0.3, 0.3), vz: 0, life: rnd(0.6, 1.1), a: 0.35 });
+        if (e.type === 'gust') fx.callout(d > 0 ? 'HANGIN · SA KANAN' : 'HANGIN · SA KALIWA', 0, WELL.top - 1.5, 1.3, { color: 'blue', height: 0.55, life: 1.2 });
+        break;
+      }
+      case 'crumble': for (const [x, y] of e.cells) { for (let k = 0; k < 3; k++) fx.chunk('semento', cx(x), cy(y), 0.2, rnd(-1, 1), rnd(0, 2), rnd(0.5, 2), rnd(0.05, 0.1)); fx.puff(cx(x), cy(y), 0.3, '#cfc4b0', { size: rnd(0.4, 0.7), vy: 0.3, vz: 0.8, life: 1, a: 0.45 }); } fx.callout('GUMUHO!', cx(e.cells[0][0]), cy(e.cells[0][1]) + 0.4, 1.2, { color: 'orange', height: 0.5, life: 1 }); break;
+      case 'andamyo': fx.callout(e.why === 'topout' ? 'SINALO NG ANDAMYO!' : 'ANDAMYO!', 0, e.why === 'topout' ? WELL.top - 2 : cy(19), 1.3, { color: 'gold', height: 0.7, life: 1.4 }); if (!reduced) shake = 0.25; if (e.cells) for (const [x, y, v] of e.cells) fx.chunk(KEYS[v] || 'hollow', cx(x), cy(y), 0.2, rnd(-2, 2), rnd(-1, 2), rnd(1, 3), rnd(0.06, 0.11)); break;
       case 'garbage': {
         riseT = 1; orient = shiftUp(orient, e.rows);
         for (let x = 0; x < COLS; x++) { fx.puff(cx(x), BASE_Y + 0.1, 0.4, '#6a5038', { size: rnd(0.3, 0.6), vy: rnd(0.4, 1.4), vz: rnd(0.4, 1.4), life: 0.9, a: 0.6 }); fx.chunk('putik', cx(x) + rnd(-0.2, 0.2), BASE_Y + 0.2, 0.3, rnd(-1.2, 1.2), rnd(1.5, 3.5), rnd(0.5, 2), rnd(0.03, 0.06)); }
@@ -363,7 +408,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       }
       case 'tool': {
         tfx.play(e); reactKapatas(e.tool === 'merienda' ? 'point' : 'cheer');
-        const NAME = { martilyo: 'MARTILYO!', semento: 'SEMENTO!', kreyn: 'KREYN!', pison: 'PISON!', merienda: 'MERIENDA!' };
+        const NAME = { martilyo: 'MARTILYO!', semento: 'SEMENTO!', kreyn: 'KREYN!', pison: 'PISON!', merienda: 'MERIENDA!', plumada: 'PLUMADA!', barena: 'BARENA!', andamyo: 'ANDAMYO!' };
         fx.callout(NAME[e.tool], 0, WELL.top - 1.5, 1.4, { color: 'orange', height: 0.9, life: 1.2 });
         break;
       }
@@ -443,7 +488,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   }
   function setVersus(on, prof = null) {
     if (on && !rig) rig = buildRivalRig(scene);
-    if (rig) { rig.show(on); if (on && prof) rig.setName(prof.name, prof.tag || prof.name, prof.color || '#ffd23f'); }
+    if (rig) { rig.show(on); rig.showP2(on && !!prof && prof.id === 'p2'); if (on && prof) rig.setName(prof.name, prof.tag || prof.name, prof.color || '#ffd23f'); }
     vsOn = on; R.g = null; fit();
   }
 
@@ -488,7 +533,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     site.beacon.light.intensity = dangerK * (reduced ? 4 : 6 + Math.sin(t * 12) * 5);
     site.beacon.group.rotation.y += dt * 8 * dangerK;
     // palms and the flag in the wind (harder in a bagyo)
-    const wind = stormOn ? 1 : 0.25;
+    const wind = stormOn || (g && g.wind) ? 1 : 0.25;
     for (const p of site.street.palms) { p.rotation.z = Math.sin(t * (0.8 + wind) + p.userData.phase) * 0.05 * (1 + wind * 3); p.rotation.x = Math.cos(t * 0.7 + p.userData.phase) * 0.03 * (1 + wind * 2); }
     const fp = site.house.flag.geometry.attributes.position;
     if (site.house.flag.parent && site.house.flag.parent.parent.visible) { for (let i = 0; i < fp.count; i++) { const x = fp.getX(i) + 0.6; fp.setZ(i, Math.sin(x * 5 - t * (4 + wind * 6)) * 0.06 * x); } fp.needsUpdate = true; }
@@ -501,7 +546,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
 
     // ---------- blocks ----------
     for (const im of Object.values(blocks)) im.count = 0;
-    ghost.count = 0; toolbox.count = 0;
+    ghost.count = 0; toolbox.count = 0; cracks.count = 0;
     drips.visible = false;
     riseT = Math.max(0, riseT - dt / 0.16);
     spawnT = Math.max(0, spawnT - dt / 0.1); rotT = Math.max(0, rotT - dt / 0.09); holdT = Math.max(0, holdT - dt / 0.2);
@@ -519,6 +564,8 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
           const v = g.board[y * COLS + x]; if (!v) continue;
           const key = v === 1 ? (orient[y * COLS + x] ? 'kawayanV' : 'kawayan') : KEYS[v];
           const box = g.boxes && g.boxes.some(([bx, by]) => bx === x && by === y);
+          const cr = g.cracks && g.cracks.length ? g.cracks.find((c) => c.x === x && c.y === y) : null;
+          if (cr) { const wob = cr.left <= 1 && !reduced ? Math.sin(t * 40 + x) * 0.015 : 0; put(key, cx(x) + wob, Y, 0, 0.97, cr.left <= 1 ? 0.15 + 0.15 * Math.sin(t * 12) : 0, 0.5 + cr.left * 0.04); if (cracks.count < 60) { m4.compose(vp.set(cx(x) + wob, Y, CS * 0.44), q0, vs.setScalar(1)); cracks.setMatrixAt(cracks.count++, m4); } continue; }
           put(key, cx(x), Y, 0, 1, (dangerK > 0.05 && y < HIDDEN + 6 ? dangerK * 0.12 * (0.5 + 0.5 * Math.sin(t * 8)) : 0) + (box ? 0.35 + 0.25 * Math.sin(t * 6) : 0), tint);
           if (box && toolbox.count < 24) { m4.compose(vp.set(cx(x), Y, CS * 0.45), q0, vs.set(1, 1, 1)); toolbox.setMatrixAt(toolbox.count++, m4); }
         }
@@ -539,7 +586,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         const lk = g.lockT > 0 ? g.lockT / g.diff.lock : 0;
         const glow = 0.14 + lk * (0.35 + 0.25 * Math.sin(t * 30)) + spawnT * 0.6;
         const s = 1 - spawnT * 0.12 + rotT * 0.06;
-        if (o.ghost !== false) {
+        if (o.ghost !== false && g.kicks !== false) {
           const gh = ghostOf(g);
           if (gh.y !== cur.y) { ghostM.color.set(GHOST_COLORS[cur.type]); for (const [x, y] of cellsOf(gh)) { m4.compose(vp.set(cx(x), cy(y), 0), q0, vs.set(1, 1, 1)); ghost.setMatrixAt(ghost.count++, m4); } ghost.instanceMatrix.needsUpdate = true; }
         }
@@ -547,7 +594,8 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         let sx = 0, sy = 0;
         cellsOf(cur).forEach(([x, y], i) => {
           const box = cur.tool === i;
-          put(key, cx(x), cy(y), 0, s, glow + (box ? 0.6 + 0.4 * Math.sin(t * 9) : 0)); sx += cx(x); sy += cy(y);
+          put(key, cx(x), cy(y), 0, s, glow + (box ? 0.6 + 0.4 * Math.sin(t * 9) : 0), cur.cracked ? 0.7 : 1); sx += cx(x); sy += cy(y);
+          if (cur.cracked && y >= 0 && cracks.count < 60) { m4.compose(vp.set(cx(x), cy(y), CS * 0.44 * s), q0, vs.setScalar(s)); cracks.setMatrixAt(cracks.count++, m4); }
           if (box && y >= 0) { m4.compose(vp.set(cx(x), cy(y), CS * 0.45 * s), q0, vs.set(1.1, 1.1, 1.1)); toolbox.setMatrixAt(toolbox.count++, m4); }
         });
         pieceAt.x = sx / 4; pieceAt.y = sy / 4;
@@ -556,9 +604,10 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     } else pieceLight.intensity = 0;
     // the lesson's target
     hintMesh.count = 0;
-    if (o.hint && g && g.phase === 'play') {
-      hintM.color.set('#ffd23f'); hintM.opacity = 0.55 + 0.35 * Math.sin(t * 5);
-      for (const [x, y] of o.hint) { m4.compose(vp.set(cx(x), cy(y), 0), q0, vs.setScalar(1 + 0.04 * Math.sin(t * 5))); hintMesh.setMatrixAt(hintMesh.count++, m4); }
+    const hintCells = o.hint || o.plumb;
+    if (hintCells && g && g.phase === 'play') {
+      hintM.color.set(o.hint ? '#ffd23f' : '#7fd8ff'); hintM.opacity = 0.55 + 0.35 * Math.sin(t * 5);
+      for (const [x, y] of hintCells) { m4.compose(vp.set(cx(x), cy(y), 0), q0, vs.setScalar(1 + 0.04 * Math.sin(t * 5))); hintMesh.setMatrixAt(hintMesh.count++, m4); }
       hintMesh.instanceMatrix.needsUpdate = true;
     }
     hintMesh.visible = hintMesh.count > 0;
@@ -579,6 +628,32 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       }
       rig.gauges([{ x: WELL.x0 - 0.4, s: 1, list: g ? g.incoming || [] : [] }, { x: rig.RX + (WELL.x0 - 0.4) * S, s: S, y: rig.LIFT, z: rig.Z, list: rg.incoming || [] }], dt, t);
     }
+    // brownout: dark but for the flashlight on the piece
+    const dk = g && g.dark && g.dark.on && g.phase !== 'over' ? 1 : 0;
+    darkK = lerp(darkK, dk, Math.min(1, dt * (dk ? 3 : 6)));
+    darkPane.visible = darkK > 0.01; beam.visible = darkK > 0.01 && !!(g && g.cur);
+    if (darkPane.visible) {
+      const px = g && g.cur ? pieceAt.x : 0, py = g && g.cur ? pieceAt.y : 4;
+      darkU.c.value.set(px, py); darkU.k.value = darkK; darkU.r.value = 1.35 + Math.sin(t * 9) * 0.03 * (reduced ? 0 : 1);
+      const y0 = WELL.top + 1.6, len = Math.max(0.5, y0 - py + 0.4);
+      beam.position.set(px * 0.5, y0, 0.9); beam.scale.set(1.1, len, 0.7); beam.lookAt(px, py, 0.4); beam.rotateX(-Math.PI / 2); beamM.opacity = 0.07 * darkK;
+      torch.position.set(px * 0.5, y0, 2.4); torch.target.position.set(px, py, 0); torch.intensity = 30 * darkK;
+    } else torch.intensity = 0;
+    renderer.toneMappingExposure *= 1 - darkK * 0.3;
+    // the Inspector
+    if (g && g.insp) { if (!insp) insp = createInspector(scene); if (!insp.on && o.mode === 'play') insp.enter(); if (g.phase === 'done') insp.end(true); if (g.phase === 'over') insp.end(false); }
+    else if (insp && insp.on) insp.leave();
+    if (insp) insp.update(dt, reduced, compact ? [1.9, 2.7, 3.1] : [3.3, 5.1, 2.7]);
+    // a second player on the rival scaffold: their hold and next three, and their ghost
+    if (rig && vsOn && o.rival && o.p2 && o.rival.cur && o.rival.phase === 'play') {
+      const rg = o.rival, S = rig.S, by = ry(ROWS - 22) + 1.1 * S;
+      const mini2 = (type, x, y, sc, tint = 1) => { const cs = SHAPES[type][0], xs = cs.map((c) => c[0]), ys = cs.map((c) => c[1]); const mx = (Math.min(...xs) + Math.max(...xs)) / 2, my = (Math.min(...ys) + Math.max(...ys)) / 2; for (const [a, b] of cs) put(keyOf(type, 0), x + (a - mx) * CS * sc, y - (b - my) * CS * sc, rig.Z + 0.5, sc, 0.1, tint); };
+      // beside the well on the right: IMBAK at the top, then the next three
+      void by;
+      if (rg.hold) mini2(rg.hold, rx(9) + 1.6 * S, ry(4.2), 0.66 * S, rg.holdUsed ? 0.4 : 1);
+      rg.queue.slice(0, 3).forEach((type, i) => mini2(type, rx(9) + 1.6 * S, ry(8.6 + i * 3), (i ? 0.5 : 0.66) * S, i ? 0.85 : 1));
+      if (o.ghost !== false) { const gh = ghostOf(rg); if (gh && gh.y !== rg.cur.y) for (const [x, y] of cellsOf(gh)) put(keyOf(rg.cur.type, rg.cur.rot), rx(x), ry(y), rig.Z, S * 0.9, 0, 0.35); }
+    }
     // the hold and the queue, on their boards
     if (g && layout) {
       const hb = site.boards.hold.userData.rect, nb = site.boards.next.userData.rect;
@@ -597,7 +672,8 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       site.drawTally(g.mode === 'bagyo' && g.rise ? [['Oras', fmt(g.elapsed)], ['Bayanihan', g.stats.bayanihan], ['T-spin', g.stats.tspins], ['Baha', `${Math.ceil(g.rise.t / 60)}s`]] : [['Oras', fmt(g.elapsed)], ['Bayanihan', g.stats.bayanihan], ['T-spin', g.stats.tspins], ['Combo', Math.max(0, g.stats.maxCombo)]]);
     }
     toolbox.instanceMatrix.needsUpdate = true; toolbox.visible = toolbox.count > 0;
-    tfx.update(dt, { slowT: g ? g.slowT || 0 : 0, piece: pieceAt, kick: () => { if (!reduced) kickV -= 0.05; } });
+    cracks.instanceMatrix.needsUpdate = true; cracks.visible = cracks.count > 0;
+    tfx.update(dt, { slowT: g ? g.slowT || 0 : 0, piece: pieceAt, kick: () => { if (!reduced) kickV -= 0.05; }, scaffold: !!(g && g.scaffold), floorY: 0.24, plumb: o.plumb && g && g.cur ? { x: o.plumb.reduce((a, [x]) => a + cx(x), 0) / o.plumb.length, y: Math.max(...o.plumb.map(([, y]) => cy(y))) } : null });
     for (const im of Object.values(blocks)) { im.visible = im.count > 0; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; im.geometry.attributes.aGlow.needsUpdate = true; }
 
     // ---------- the parade ----------
@@ -662,6 +738,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   // Where something in the world is on screen, in CSS pixels (for the foreman's bubble).
   function screenOf(x, y, z) { const v = vp.set(x, y, z).project(camera), r = canvas.getBoundingClientRect(); return { x: ((v.x + 1) / 2) * r.width, y: ((1 - v.y) / 2) * r.height, on: v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1 }; }
   const kapHead = () => screenOf(kap.x, 2.25, kap.z);
+  const inspHead = () => (insp && insp.on ? screenOf(...insp.head()) : { x: 0, y: 0, on: false });
   const rivalHead = () => (rig && vsOn ? screenOf(rig.RX, rig.LIFT + (WELL.top + 1.75) * rig.S, rig.Z + 0.3) : { x: 0, y: 0, on: false });
 
   // ---------- the real things, as they load ----------
@@ -689,12 +766,12 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   resize();
   applyTod('golden', null, 0, 1);
   return {
-    frame, event, resize, post, renderer, scene, setEnv, setPeople, setCrowd, kapHead, screenOf, rivalEvent, attack, setVersus, rivalHead,
+    frame, event, resize, post, renderer, scene, setEnv, setPeople, setCrowd, kapHead, screenOf, rivalEvent, attack, setVersus, rivalHead, inspHead,
     setHouseStyle(id) { site.setHouseStyle(id); },
     celebrate() { fx.confetti(0, WELL.top + 1, 1.2, 220); cheerT = 4; reactKapatas('victory'); if (!reduced) flashK = 0.2; },
     get cellPx() { return cellPx; }, get cine() { return cine; }, get busy() { return fx.busy; },
     setInsets(top, bottom) { insets = { top, bottom }; fit(); }, setAngled(b) { angled = b; fit(); },
     setShadows(on) { sun.castShadow = on; },
-    debug: { cam, play, site, fx, kap, get compact() { return compact; } },
+    debug: { cam, play, site, fx, kap, get compact() { return compact; }, get insp() { return insp; } },
   };
 }
