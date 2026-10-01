@@ -2,7 +2,7 @@
 // rises), the kawayan scaffolding round the board, every block in its material, the ghost, the hold
 // and the queue, Kapatas and his remarks, and the juice: dust, words, and the Bayanihan parade.
 import { COLS, ROWS, HIDDEN, VISIBLE, CLEAR_T, cellsOf, ghostOf } from './game.mjs';
-import { SHAPES, MATERIALS, ID, MUD } from './pieces.mjs';
+import { SHAPES, MATERIALS, ID, MUD, CEMENT } from './pieces.mjs';
 
 export const C = 24, BX = 96, BY = 52, W = 432, H = 560;
 const TYPE_OF = Object.fromEntries(Object.entries(ID).map(([t, v]) => [v, t]));
@@ -41,10 +41,10 @@ export function createRenderer(canvas) {
     if (sprites.has(v)) return sprites.get(v);
     const c = document.createElement('canvas'); c.width = C * 2; c.height = C * 2;
     const m = c.getContext('2d'); m.scale(2, 2);
-    const mat = MATERIALS[v === MUD ? MUD : TYPE_OF[v]];
+    const mat = MATERIALS[v === MUD || v === CEMENT ? v : TYPE_OF[v]];
     m.fillStyle = mat.dark; m.fillRect(0, 0, C, C);
     m.fillStyle = mat.color; m.fillRect(1, 1, C - 2, C - 3);
-    const t = v === MUD ? 'MUD' : TYPE_OF[v];
+    const t = v === MUD ? 'MUD' : v === CEMENT ? 'CEMENT' : TYPE_OF[v];
     switch (t) {
       case 'I': // kawayan: nodes and a shine
         m.fillStyle = 'rgba(255,255,255,0.3)'; m.fillRect(3, 1, 3, C - 3);
@@ -77,6 +77,7 @@ export function createRenderer(canvas) {
         m.fillStyle = mat.dark; for (const [a, b] of [[5, 5], [15, 7], [9, 14], [18, 17], [4, 18], [12, 4]]) { m.beginPath(); m.arc(a, b, 1.3, 0, TAU); m.fill(); }
         m.fillStyle = 'rgba(255,255,255,0.18)'; m.fillRect(1, 1, C - 2, 2);
         break;
+      case 'CEMENT': m.fillStyle = 'rgba(255,255,255,0.18)'; m.fillRect(1, 1, C - 2, 3); break;
       default: // putik
         m.fillStyle = mat.dark; for (const [a, b, r] of [[6, 7, 3], [16, 12, 4], [9, 17, 2.5], [19, 5, 2]]) { m.beginPath(); m.arc(a, b, r, 0, TAU); m.fill(); }
     }

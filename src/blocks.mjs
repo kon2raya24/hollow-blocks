@@ -146,6 +146,12 @@ function adobe() {
     return [...sc(c, 0.9 + cut * 0.08 + (fine[i] - 0.5) * 0.1), -(pit ? 1 : 0) * 0.8 + cut * 0.25 + big[i] * 0.4, 0.96];
   }, { strength: 3.5 });
 }
+function semento() {
+  // freshly poured, trowelled smooth: pale grey, a sheen where it's still wet
+  const r = rng(909), big = fbm(S, S, 64, 3, r), fine = noise(S, S, 2, r), trowel = fbm(S, S, 24, 2, r);
+  const grey = hexRGB('#a4a8a6');
+  return pbr((x, y) => { const i = y * S + x, sw = Math.sin((x + y) * 0.05 + trowel[i] * 6) * 0.5 + 0.5; return [...sc(grey, 0.92 + (big[i] - 0.5) * 0.12 + (fine[i] - 0.5) * 0.06), sw * 0.15 + fine[i] * 0.08, 0.5 - sw * 0.25]; }, { strength: 2 });
+}
 function putik() {
   const r = rng(808), lump = fbm(S, S, 40, 4, r), fine = noise(S, S, 2, r), peb = noise(S, S, 9, r), wet = fbm(S, S, 64, 3, r);
   const mud = hexRGB('#4a3220'), dark = hexRGB('#2a1c10'), clay = hexRGB('#6a4a2c');
@@ -160,13 +166,13 @@ function putik() {
 }
 
 // ---------- the materials ----------
-// board value → key; 9 is kawayan standing up (the view tracks which way each bamboo cell lies)
-export const KEYS = { 1: 'kawayan', 2: 'hollow', 3: 'ladrilyo', 4: 'yero', 5: 'plywood', 6: 'baldosa', 7: 'adobe', 8: 'putik', 9: 'kawayanV' };
+// board value → material (the view tracks which way each bamboo cell lies, for kawayanV)
+export const KEYS = { 1: 'kawayan', 2: 'hollow', 3: 'ladrilyo', 4: 'yero', 5: 'plywood', 6: 'baldosa', 7: 'adobe', 8: 'putik', 9: 'semento' }; // and 'kawayanV': bamboo standing
 export const TYPE_KEY = { I: 1, O: 2, T: 3, S: 4, Z: 5, J: 6, L: 7 };
 // what each material sounds like and sheds when it breaks: [sound, debris colour, dust colour]
 export const FEEL = {
   kawayan: ['bamboo', '#c9c768', '#d8d2a8'], hollow: ['block', '#9aa0a4', '#c8c6c0'], ladrilyo: ['brick', '#b04a30', '#d6a58a'], yero: ['metal', '#6fb3c4', '#c8d4d8'],
-  plywood: ['wood', '#d8b07a', '#e6d2b0'], baldosa: ['tile', '#3a6ad0', '#e8e4dc'], adobe: ['stone', '#d4843e', '#e6b886'], putik: ['mud', '#5a4028', '#7a6048'],
+  plywood: ['wood', '#d8b07a', '#e6d2b0'], semento: ['block', '#9a9d9c', '#d0d0cc'], baldosa: ['tile', '#3a6ad0', '#e8e4dc'], adobe: ['stone', '#d4843e', '#e6b886'], putik: ['mud', '#5a4028', '#7a6048'],
 };
 
 // Instanced blocks get a per-instance glow (the piece in hand, the lock warning, a row about to go).
@@ -193,6 +199,7 @@ export function makeMaterials() {
   out.baldosa = withGlow(new THREE.MeshPhysicalMaterial({ map: b.map, normalMap: b.normalMap, roughnessMap: b.roughnessMap, roughness: 1, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.2 }));
   out.adobe = std(adobe());
   out.putik = std(putik(), { envMapIntensity: 1.8 });
+  out.semento = std(semento());
   return out;
 }
 

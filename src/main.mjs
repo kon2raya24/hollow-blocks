@@ -4,6 +4,8 @@
 import { createGame, step, MODES, DIFFICULTY } from './game.mjs';
 import { bot } from './bot.mjs';
 import { createAudio } from './audio.mjs';
+import { CONTRACTS, BARANGAYS, contractById, starsFor, unlocked, brgyStars, describe } from './contracts.mjs';
+import { xpFor, rankOf, RANKS, STYLES, styleOpen, MEDALS, newMedals, addStats, dateKey, dailySeed, shareText } from './progress.mjs';
 
 const Q = new URLSearchParams(location.search);
 const TEST = Q.get('test') === '1';
@@ -39,6 +41,8 @@ const SAYS = {
   brink: ['Konti na lang, guguho na!', 'Delikado! Ibaba mo na!', 'Susmaryosep, ang taas!'],
   drought: ['Nasaan na ang kawayan?!', 'Wala pang kawayan. Diskarte muna!', 'Matagal pa ang kawayan, ha.'],
   relief: ['Ayan na ang kawayan!', 'Sa wakas, kawayan!'],
+  tool: ['Gamitin mo yan!', 'Ayos ang gamit!', 'Diskarte ng tunay na mason!'],
+  lindol: ['Lindol! Kapit!', 'Yumayanig! Ingat!'],
   ceremony: ['Tapos ang bahay! Salamat sa lahat!', 'Bahay na! Kain tayo mamaya!'],
 };
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -50,7 +54,12 @@ const data = {
   hints: Array.isArray(saved.hints) ? saved.hints : [],
   gfx: [0, 1, 2].includes(saved.gfx) ? saved.gfx : 'auto', // graphics: auto (steps down on slow devices) or a fixed level
   opt: { music: 1, sfx: 1, ghost: true, cine: true, angle: true, ...(saved.opt || {}) }, // the settings screen
+  // progression (added in v4; older saves start from zero)
+  xp: Number.isFinite(saved.xp) ? saved.xp : 0, medals: Array.isArray(saved.medals) ? saved.medals : [], stats: saved.stats && typeof saved.stats === 'object' ? saved.stats : {},
+  stars: saved.stars && typeof saved.stars === 'object' ? saved.stars : {}, daily: saved.daily && typeof saved.daily === 'object' ? saved.daily : {}, style: STYLES.some((x) => x.id === saved.style) ? saved.style : 'apartment',
 };
+if (!MODES[data.mode]) data.mode = 'bahay';
+const TOOL_ICON = { martilyo: '🔨', semento: '🪣', kreyn: '🏗️', pison: '🚜', merienda: '🍞' };
 const persist = () => store.set(data);
 const reduced = () => data.calm || matchMedia('(prefers-reduced-motion: reduce)').matches;
 const seed = () => (TEST && Q.get('seed') ? Number(Q.get('seed')) : Math.floor(Math.random() * 1e9));
@@ -64,16 +73,17 @@ let view = null, R = null; // the 3D view, or the 2D renderer when WebGL is miss
 const A = createAudio();
 A.setMuted(data.muted); A.setMix(data.opt);
 
-let mode = 'title', game = null;
+let mode = 'title', game = null, job = null; // job: the contract being played
 let demo = newDemo();
 function newDemo() { return createGame({ seed: seed(), mode: 'bahay', difficulty: 'madali' }); }
 
-const SCREENS = ['title', 'safety', 'pause', 'results', 'settings'];
+const SCREENS = ['title', 'safety', 'pause', 'results', 'settings', 'map', 'brief', 'stats', 'how'];
 function show(name) {
   for (const id of SCREENS) { const el = $(id), on = id === name; if (on && el.hidden) { el.classList.remove('in'); void el.offsetWidth; el.classList.add('in'); } el.hidden = !on; }
   if (name) { toasts.length = 0; $('toast').hidden = true; $('big').hidden = true; bigT = 0; }
   $('pause-btn').hidden = name !== null;
   $('hud').hidden = !(name === null || name === 'pause');
+  $('tools').hidden = !(game && game.toolsOn);
   document.body.classList.toggle('playing', name === null);
   const first = name && ($(name).querySelector('button.primary') || $(name).querySelector('button'));
   if (first) first.focus({ preventScroll: true });
@@ -84,10 +94,13 @@ function insets() { if (view) view.setInsets(touch ? 66 : 76, touch && mode === 
 function start() {
   A.start();
   if (!data.safety && !AUTOPLAY) { mode = 'safety'; show('safety'); return; }
-  game = createGame({ seed: seed(), mode: data.mode, difficulty: data.difficulty });
+  if (data.mode === 'proyekto' && !job) { openMap(); return; }
+  const daily = data.mode === 'daily';
+  game = createGame({ seed: daily ? dailySeed(dateKey()) : seed(), mode: data.mode, difficulty: daily ? 'katamtaman' : data.difficulty, contract: data.mode === 'proyekto' ? job : null });
+  toolsKey = '';
   if (R) R.reset();
   mode = 'play'; clearInput(); show(null); hudKey = ''; sinceI = 0;
-  big(MODES[data.mode].name, data.mode === 'deadline' ? '40 hanay, bilisan!' : data.mode === 'bagyo' ? 'Tumataas ang baha!' : 'Buuin ang bahay!', 1.6);
+  big(job && data.mode === 'proyekto' ? job.name : MODES[data.mode].name, job && data.mode === 'proyekto' ? describe(job).goal : { deadline: '40 hanay, bilisan!', bagyo: 'Tumataas ang baha!', karera: 'Dalawang minuto. Kita, kita, kita!', daily: `Daily ${dateKey()} · pareho para sa lahat` }[data.mode] || 'Buuin ang bahay!', 1.6);
   hint('move', touch ? 'I-tap para iikot, i-drag pakaliwa o pakanan, i-flick pababa para ibagsak. May mga button din sa ibaba.' : '← → galaw · ↑ o X ikot · Z pabalik · ↓ dahan-dahan · Space bagsak · C o Shift imbak · may controller din');
 }
 
@@ -98,12 +111,33 @@ function finish(done) {
     mode = 'results';
     const k = bestKey(), prev = data.best[k];
     let isBest = false;
-    if (g.mode === 'deadline') { if (done && (!prev || g.elapsed < prev)) { data.best[k] = g.elapsed; isBest = true; } }
+    if (g.mode === 'proyekto') { /* contracts keep stars, not a best */ }
+    else if (g.mode === 'deadline') { if (done && (!prev || g.elapsed < prev)) { data.best[k] = g.elapsed; isBest = true; } }
     else if (!prev || g.score > prev) { data.best[k] = g.score; isBest = g.score > 0; }
+    // progression: stars, XP and rank, medals, stats, the daily
+    const r = { mode: g.mode, done, ticks: g.elapsed, score: g.score, lines: g.lines, level: g.level, pieces: g.pieces, bayanihan: g.stats.bayanihan, tspins: g.stats.tspins, tspinTriple: g.stats.tspinTriple || 0, maxCombo: g.stats.maxCombo, perfect: g.stats.perfect, tools: g.stats.tools, daily: g.mode === 'daily' };
+    let stars = 0;
+    if (g.mode === 'proyekto' && g.contract) { stars = starsFor(g.contract, r); r.stars = stars; data.stars[g.contract.id] = Math.max(data.stars[g.contract.id] || 0, stars); }
+    if (g.mode === 'daily') { const dk = dateKey(); const prevD = data.daily[dk]; if (!prevD || g.score > prevD.score) data.daily = { [dk]: { score: g.score, lines: g.lines, bayanihan: g.stats.bayanihan } }; }
+    const before = rankOf(data.xp), gain = xpFor(r);
+    data.xp += gain; data.stats = addStats(data.stats, r);
+    const after = rankOf(data.xp);
+    const fresh = newMedals(r, { medals: data.medals, stats: data.stats, xp: data.xp, brgyStars: [0, 1, 2].map((b) => brgyStars(data.stars, b)) });
+    data.medals.push(...fresh);
     persist();
-    $('results-title').textContent = done ? 'Tapos sa oras!' : g.mode === 'bagyo' ? 'Inabot ng baha!' : 'Gumuho ang pader!';
+    $('results-stars').hidden = g.mode !== 'proyekto';
+    $('results-stars').innerHTML = [1, 2, 3].map((k) => `<span class="${k <= stars ? '' : 'off'}">★</span>`).join('');
+    $('results-xp').innerHTML = `+${gain} XP · ${after.name}${after.next ? ` · ${after.need} pa para sa ${after.next}` : ''}<i style="--p:${Math.round(after.progress * 100)}%"></i>`;
+    $('results-medals').innerHTML = fresh.map((id) => { const m = MEDALS.find((x) => x.id === id); return `<div class="medal got fresh"><b>★</b>${m.name}</div>`; }).join('');
+    const nextJob = g.mode === 'proyekto' && stars > 0 ? CONTRACTS[CONTRACTS.findIndex((c) => c.id === g.contract.id) + 1] : null;
+    $('next-job').hidden = !(nextJob && unlocked(data.stars, nextJob.id));
+    $('next-job').onclick = () => openBrief(nextJob);
+    $('share').hidden = g.mode !== 'daily';
+    $('share').onclick = () => { const txt = shareText(dateKey(), r); try { if (navigator.share) navigator.share({ text: txt }).catch(() => {}); else navigator.clipboard.writeText(txt).then(() => toast('Nakopya! Copied to the clipboard.', 2000)); } catch { /* nothing to share with */ } };
+    if (after.index > before.index) setTimeout(() => { big('BAGONG RANGGO!', `${after.name}${STYLES.find((x) => x.rank === after.index) ? ` · bagong bahay: ${STYLES.find((x) => x.rank === after.index).name}` : ''}`, 3); if (view) view.celebrate(); A.event({ type: 'ceremony' }); }, 600);
+    $('results-title').textContent = g.mode === 'proyekto' ? (done ? 'Tapos ang kontrata!' : 'Hindi natapos…') : g.mode === 'karera' || g.mode === 'daily' ? 'Oras na!' : done ? 'Tapos sa oras!' : g.mode === 'bagyo' ? 'Inabot ng baha!' : 'Gumuho ang pader!';
     $('results-score').textContent = g.mode === 'deadline' ? (done ? clock(g.elapsed) : `${g.lines}/40`) : peso(g.score);
-    const b = data.best[k];
+    const b = g.mode === 'proyekto' ? 0 : data.best[k];
     $('results-best').textContent = isBest ? 'Bagong best! New best!' : b ? `Best: ${g.mode === 'deadline' ? clock(b) : peso(b)}` : '';
     $('results-best').className = isBest ? 'new' : 'muted';
     const stat = (label, v) => `<div><span>${label}</span><b>${v}</b></div>`;
@@ -157,6 +191,10 @@ function onEvent(e) {
     case 'levelUp': if (!(view && game.mode === 'bahay' && (1 + Math.floor(game.lines / 10)) % 5 === 0)) { big(`Palapag ${e.level}!`, 'Bagong palapag · New floor', 1.5); say('level', true); } break;
     case 'rise': if (Math.random() < 0.35) say('rise'); hint('bagyo', 'Tumataas ang baha mula sa ilalim! Punuin ang butas para matanggal ang putik.'); break;
     case 'hardDrop': buzz(10); break;
+    case 'toolEarned': toast(`May bagong gamit: ${TOOL_ICON[e.tool]} ${e.tool.toUpperCase()}! Pindutin ang ${touch ? '🧰' : 'E'} para gamitin.`, 2400); buzz([10, 20, 10]); break;
+    case 'tool': buzz(25); say('tool', true); break;
+    case 'lindol': buzz([60, 40, 60]); say('lindol', true); break;
+    case 'perfect': big('MALINIS!', 'Perfect clear', 1.6); break;
     case 'gameover': say('over', true); finish(false); break;
     case 'done': big('TAPOS!', 'Deadline met!', 2); say('done', true); finish(true); break;
     default: break;
@@ -165,12 +203,12 @@ function onEvent(e) {
 
 function pause() { if (mode === 'play') { mode = 'pause'; show('pause'); } }
 function resume() { if (mode === 'pause') { mode = 'play'; clearInput(); show(null); } }
-function toMenu() { mode = 'title'; game = null; labels(); show('title'); }
+function toMenu() { mode = 'title'; game = null; job = null; labels(); show('title'); }
 
 // ---------- input ----------
 const KEYS = {
   ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right', ArrowDown: 'down', s: 'down',
-  ' ': 'hard', ArrowUp: 'cw', x: 'cw', w: 'cw', z: 'ccw', q: 'ccw', c: 'hold', Shift: 'hold',
+  ' ': 'hard', ArrowUp: 'cw', x: 'cw', w: 'cw', z: 'ccw', q: 'ccw', c: 'hold', Shift: 'hold', e: 'tool',
 };
 const HELD = new Set(['left', 'right', 'down']);
 const held = new Set();
@@ -246,7 +284,8 @@ function readPad(dt) {
     padHeldDirs = dirs;
     if (edge('up', up)) pressed.push('hard');
     if (edge('a', b(0))) pressed.push('cw');
-    if (edge('bb', b(1) || b(2))) pressed.push('ccw');
+    if (edge('bb', b(1))) pressed.push('ccw');
+    if (edge('tool', b(2))) pressed.push('tool');
     if (edge('hold', b(3) || b(4) || b(5) || b(6) || b(7))) pressed.push('hold');
     if (edge('start', b(9))) pause();
     return;
@@ -266,7 +305,7 @@ function readPad(dt) {
   };
   if (edge('mL', left)) move(-1, 0); if (edge('mR', right)) move(1, 0); if (edge('mU', up)) move(0, -1); if (edge('mD', down)) move(0, 1);
   if (edge('a', b(0))) { A.start(); document.activeElement?.click(); }
-  if (edge('bb', b(1))) { if (screen === 'pause') resume(); else if (screen === 'settings') $('settings-ok').click(); else if (screen === 'results') toMenu(); }
+  if (edge('bb', b(1))) { if (screen === 'pause') resume(); else if (screen === 'settings') $('settings-ok').click(); else if (screen === 'results' || screen === 'map' || screen === 'stats' || screen === 'how') toMenu(); else if (screen === 'brief') openMap(); }
   if (edge('start', b(9))) { if (screen === 'pause') resume(); else if (screen === 'title') start(); }
 }
 
@@ -276,17 +315,23 @@ function labels() {
   for (const b of document.querySelectorAll('[data-diff]')) b.setAttribute('aria-pressed', String(b.dataset.diff === data.difficulty));
   for (const b of document.querySelectorAll('[data-mode]')) b.setAttribute('aria-pressed', String(b.dataset.mode === data.mode));
   $('mode-note').textContent = {
-    bahay: 'Bahay: walang katapusan. Bawat 10 hanay, bagong palapag at mas mabilis.',
+    bahay: 'Bahay: walang katapusan. Bawat 10 hanay, bagong palapag at mas mabilis. May gamit (tools)!',
     deadline: 'Deadline: 40 hanay sa tanghaling tapat, pinakamabilis na oras ang panalo.',
     bagyo: 'Bagyo: tumataas ang putik mula sa ilalim. Tumagal hangga’t kaya!',
+    karera: 'Karera: dalawang minuto, pinakamataas na kita. May gamit!',
+    daily: `Daily ${dateKey()}: parehong mga piraso para sa lahat ngayong araw. Dalawang minuto.${data.daily[dateKey()] ? ` Best mo ngayon: ${peso(data.daily[dateKey()].score)}` : ''}`,
+    proyekto: `Proyekto: 15 kontrata sa 3 barangay. ${CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0)}/45 bituin.`,
   }[data.mode];
+  const rk = rankOf(data.xp);
+  $('title-rank').textContent = `Ranggo: ${rk.name} · ${data.xp.toLocaleString('en-US')} XP${rk.next ? ` (${rk.need.toLocaleString('en-US')} pa para sa ${rk.next})` : ''} · ${data.medals.length}/${MEDALS.length} medalya`;
+  for (const b of document.querySelectorAll('[data-diff]')) b.disabled = data.mode === 'daily' || data.mode === 'proyekto';
   $('diff-note').textContent = { madali: 'Madali: mas mabagal ang bagsak at mas matagal bago dumikit.', katamtaman: 'Katamtaman: ang klasiko.', mahirap: 'Mahirap: magsisimula sa ika-6 na palapag.' }[data.difficulty];
   const b = data.best[bestKey()];
-  $('title-best').textContent = b ? `Best (${MODES[data.mode].name}, ${DIFFICULTY[data.difficulty].name}): ${data.mode === 'deadline' ? clock(b) : peso(b)}` : '';
+  $('title-best').textContent = data.mode === 'proyekto' || data.mode === 'daily' ? '' : b ? `Best (${MODES[data.mode].name}, ${DIFFICULTY[data.difficulty].name}): ${data.mode === 'deadline' ? clock(b) : peso(b)}` : '';
 }
 for (const b of document.querySelectorAll('.sound')) b.onclick = toggleSound;
 for (const b of document.querySelectorAll('[data-diff]')) b.onclick = () => { data.difficulty = b.dataset.diff; persist(); labels(); };
-for (const b of document.querySelectorAll('[data-mode]')) b.onclick = () => { data.mode = b.dataset.mode; persist(); labels(); };
+for (const b of document.querySelectorAll('[data-mode]')) b.onclick = () => { data.mode = b.dataset.mode; job = null; persist(); labels(); if (data.mode === 'proyekto') openMap(); };
 
 // ---------- settings ----------
 let settingsFrom = 'title';
@@ -321,6 +366,45 @@ $('settings-ok').onclick = () => { if (settingsFrom === 'pause') { mode = 'pause
 for (const b of document.querySelectorAll('.settings-btn')) b.onclick = () => openSettings(mode === 'pause' ? 'pause' : 'title');
 function applyGfx() { if (view) view.setShadows(view.post.level > 0 || data.gfx !== 0); }
 
+// ---------- Proyekto: the stage map and the contract card ----------
+function openMap() {
+  mode = 'map'; job = null;
+  const total = CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0);
+  $('map-note').textContent = `${total}/45 ★ · Kailangan ng 8 ★ sa isang barangay para sa susunod.`;
+  $('map-body').innerHTML = BARANGAYS.map((name, b) => `<div class="card brgy"><h3>Brgy. ${name}<small>${brgyStars(data.stars, b)}/15 ★</small></h3>${CONTRACTS.filter((c) => c.brgy === b).map((c) => { const st = data.stars[c.id] || 0, open = unlocked(data.stars, c.id); return `<button type="button" class="job" data-job="${c.id}" ${open ? '' : 'disabled'}>${open ? c.name : '🔒 ' + c.name}<i>${'★'.repeat(st)}${'☆'.repeat(3 - st)}</i></button>`; }).join('')}</div>`).join('');
+  for (const bt of $('map-body').querySelectorAll('[data-job]')) bt.onclick = () => openBrief(contractById(bt.dataset.job));
+  show('map');
+}
+function openBrief(c) {
+  job = c; data.mode = 'proyekto'; mode = 'brief';
+  const d = describe(c), st = data.stars[c.id] || 0;
+  $('brief-brgy').textContent = `Brgy. ${BARANGAYS[c.brgy]} · Kontrata ${CONTRACTS.filter((x) => x.brgy === c.brgy).indexOf(c) + 1}/5`;
+  $('brief-name').textContent = c.name; $('brief-text').textContent = c.brief; $('brief-goal').textContent = d.goal; $('brief-twist').textContent = d.twist || 'Walang dagdag na pahirap.'; $('brief-par').textContent = d.par;
+  $('brief-stars').innerHTML = [1, 2, 3].map((k) => `<span class="${k <= st ? '' : 'off'}">★</span>`).join('');
+  show('brief');
+}
+$('brief-go').onclick = start;
+$('brief-back').onclick = openMap;
+// ---------- the stats page: rank, totals, medals, the house style ----------
+function openStats() {
+  mode = 'stats';
+  const st = { games: 0, lines: 0, bayanihan: 0, tspins: 0, tools: 0, seconds: 0, ...data.stats }, rk = rankOf(data.xp);
+  const row = (k, v) => `<tr><td>${k}</td><td>${v}</td></tr>`;
+  const best = (m) => { const v = data.best[`${m}.${data.difficulty}`]; return v ? (m === 'deadline' ? clock(v) : peso(v)) : '—'; };
+  $('stats-body').innerHTML = `<div class="xp">${rk.name} · ${data.xp.toLocaleString('en-US')} XP${rk.next ? ` · ${rk.need.toLocaleString('en-US')} pa para sa ${rk.next}` : ''}<i style="--p:${Math.round(rk.progress * 100)}%"></i></div>
+    <table>${row('Laro', st.games)}${row('Hanay', st.lines)}${row('Bayanihan', st.bayanihan)}${row('T-spin', st.tspins)}${row('Gamit na nagamit', st.tools)}${row('Oras sa site', clock(st.seconds * 60))}
+    ${row(`Best Bahay (${DIFFICULTY[data.difficulty].name})`, best('bahay'))}${row('Best Deadline', best('deadline'))}${row('Best Bagyo', best('bagyo'))}${row('Best Karera', best('karera'))}${row('Bituin sa Proyekto', `${CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0)}/45`)}</table>
+    <h3 style="margin:10px 0 4px;font:italic 900 18px 'Barlow Condensed';color:#ffd23f">MEDALYA ${data.medals.length}/${MEDALS.length}</h3>
+    <div class="medals">${MEDALS.map((m) => `<div class="medal ${data.medals.includes(m.id) ? 'got' : ''}" title="${m.desc}"><b>★</b>${m.name}</div>`).join('')}</div>
+    <h3 style="margin:10px 0 4px;font:italic 900 18px 'Barlow Condensed';color:#ffd23f">ISTILO NG BAHAY</h3>
+    <div class="modes">${STYLES.map((x) => `<button type="button" data-style="${x.id}" aria-pressed="${data.style === x.id}" ${styleOpen(data.xp, x.id) ? '' : 'disabled'}>${styleOpen(data.xp, x.id) ? x.name : '🔒 ' + x.name + ' · ' + RANKS[x.rank].name}</button>`).join('')}</div>`;
+  for (const bt of $('stats-body').querySelectorAll('[data-style]')) bt.onclick = () => { data.style = bt.dataset.style; persist(); if (view) view.setHouseStyle(data.style); openStats(); };
+  show('stats');
+}
+$('stats-btn').onclick = openStats;
+$('stats-ok').onclick = () => toMenu();
+$('how-btn').onclick = () => { mode = 'how'; show('how'); };
+$('how-ok').onclick = () => toMenu();
 $('play').onclick = start;
 $('safety-ok').onclick = () => { data.safety = true; persist(); start(); };
 $('retry').onclick = start;
@@ -331,10 +415,18 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) pause
 labels();
 
 // ---------- the HUD ----------
-let hudKey = '';
+let hudKey = '', toolsKey = '';
 function hud(g) {
+  if (g.toolsOn) {
+    const tk = g.tools.join(',');
+    if (tk !== toolsKey) {
+      const was = toolsKey ? toolsKey.split(',').filter(Boolean).length : 0; toolsKey = tk;
+      [...$('tools').querySelectorAll('span')].forEach((el, i) => { const t = g.tools[i]; el.textContent = t ? TOOL_ICON[t] : '·'; el.className = t ? (i === 0 ? 'next' : '') : 'empty'; el.title = t || ''; if (t && i >= was && i < g.tools.length) { el.classList.add('pop'); } });
+      $('pad-tool').disabled = !g.tools.length; $('pad-tool').innerHTML = g.tools.length ? `${TOOL_ICON[g.tools[0]]}<b>${g.tools.length}</b>` : '🧰';
+    }
+  }
   const best = data.best[bestKey()] || 0;
-  const k = `${g.score}|${g.level}|${g.lines}|${g.mode === 'deadline' ? Math.floor(g.elapsed / 6) : best}|${g.rise ? Math.ceil(g.rise.t / 60) : ''}`;
+  const k = `${g.score}|${g.level}|${g.lines}|${g.mode !== 'bahay' && g.mode !== 'bagyo' ? Math.floor(g.elapsed / 6) : best}|${g.rise ? Math.ceil(g.rise.t / 60) : ''}|${g.stats.tspins}|${g.stats.maxCombo}|${g.board.filter((v) => v === 8).length}`;
   if (k === hudKey) return;
   const bumped = hudKey && +hudKey.split('|')[0] !== g.score;
   hudKey = k;
@@ -342,8 +434,21 @@ function hud(g) {
   if (bumped) { const el = $('h-score'); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
   $('h-mode').querySelector('b').textContent = g.modeDef.name.toUpperCase();
   $('h-mode').querySelector('em').textContent = g.mode === 'deadline' ? `${Math.max(0, 40 - g.lines)} hanay pa` : `Palapag ${g.level} · ${g.lines} hanay${g.rise && view && view.debug.compact ? ` · baha ${Math.ceil(g.rise.t / 60)}s` : ''}`;
-  $('h-best').querySelector('small').textContent = g.mode === 'deadline' ? 'Oras' : 'Best';
-  $('h-best').querySelector('b').textContent = g.mode === 'deadline' ? clock(g.elapsed) : peso(Math.max(best, g.score));
+  const timed = g.mode === 'deadline' || g.mode === 'proyekto' || g.limit;
+  $('h-best').querySelector('small').textContent = g.limit ? 'Natitira' : timed ? 'Oras' : 'Best';
+  $('h-best').querySelector('b').textContent = g.limit ? clock(Math.max(0, g.limit - g.elapsed)) : timed ? clock(g.elapsed) : peso(Math.max(best, g.score));
+  if (g.mode === 'proyekto' && g.goal) {
+    const q = g.goal, parts = [];
+    if (q.lines) parts.push(`${Math.min(g.lines, q.lines)}/${q.lines} hanay`);
+    if (q.tspins) parts.push(`${g.stats.tspins}/${q.tspins} T-spin`);
+    if (q.bayanihan) parts.push(`${g.stats.bayanihan}/${q.bayanihan} Bayanihan`);
+    if (q.combo) parts.push(`combo ${Math.max(0, g.stats.maxCombo)}/${q.combo}`);
+    if (q.score) parts.push(`${peso(g.score)}/${peso(q.score)}`);
+    if (q.survive) parts.push(`${clock(Math.max(0, q.survive - g.elapsed))} pa`);
+    if (q.garbage) parts.push(`${g.board.filter((v) => v === 8).length} kalat`);
+    $('h-mode').querySelector('b').textContent = g.contract.name.toUpperCase();
+    $('h-mode').querySelector('em').textContent = parts.join(' · ');
+  }
 }
 
 // ---------- loop ----------
@@ -394,6 +499,7 @@ async function boot() {
     const { createView } = await import('./view3d.mjs');
     view = createView($('view'), { low: touch, gfx: Q.get('gfx') ?? (data.gfx === 'auto' ? null : String(data.gfx)) });
     view.setAngled(data.opt.angle);
+    if (data.style !== 'apartment') view.setHouseStyle(data.style);
     window.addEventListener('resize', () => view.resize());
     new ResizeObserver(() => view.resize()).observe($('view'));
   } catch (err) {

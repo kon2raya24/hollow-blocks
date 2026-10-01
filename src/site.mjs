@@ -263,7 +263,8 @@ export function buildSite(scene, { low = false } = {}) {
   }
 
   // ---------- the house going up next door ----------
-  const house = buildHouse(dyn, { x: 12.2, z: -7.2, w: 8.4, d: 5.4 });
+  const HOUSE_AT = { x: 12.2, z: -7.2, w: 8.4, d: 5.4 };
+  const house = buildHouse(dyn, HOUSE_AT);
 
   // ---------- materials lying about ----------
   const props = new THREE.Group(); props.name = 'stand-in props'; add(props);
@@ -350,11 +351,38 @@ export function buildSite(scene, { low = false } = {}) {
 
   // the whole site throws and takes shadows; keep the number of draws down
   mergeStatic(world);
-  return { world, dyn, boards, layoutBoards, drawTally, house, raiseBunting, resetBunting, updateBunting, beacon: { glass: beaconGlass, light: beaconLight, group: beacon }, pulley, net, props, street, slabM, groundM, mixer, drum };
+  const out = { world, dyn, boards, layoutBoards, drawTally, house, raiseBunting, resetBunting, updateBunting, beacon: { glass: beaconGlass, light: beaconLight, group: beacon }, pulley, net, props, street, slabM, groundM, mixer, drum };
+  out.setHouseStyle = (id) => { const h = out.house, done = Math.max(1, h.done), k = Math.max(0, h.courses); dyn.remove(h.group); out.house = buildHouse(dyn, HOUSE_AT, id); out.house.setProgress(done, k / 14); };
+  return out;
 }
 
 // ---------- the house: floor by floor, the top one rising course by course ----------
-function buildHouse(parent, { x, z, w, d }) {
+// The house styles (picked by rank): walls, frame, windows and the roof for each.
+function houseStyle(id) {
+  const tex = (fn) => { const t = fn(); return { map: t.map, normalMap: t.normalMap }; };
+  if (id === 'kubo') {
+    const wall = new THREE.MeshStandardMaterial({ ...tex(() => T.weave(91)), color: '#e8d0a0', roughness: 0.85 }); wall.map.repeat.set(5, 3); if (wall.normalMap) wall.normalMap.repeat.set(5, 3);
+    return { wall: () => wall, frame: mat('#c8b46a', { roughness: 0.6 }), win: 'shutter', roof: 'nipa' };
+  }
+  if (id === 'bato') {
+    const stone = new THREE.MeshStandardMaterial({ ...tex(() => T.concrete(93, '#c88a52', { size: 256, repeat: [4, 2], grime: 0.9 })), roughness: 0.95 });
+    const wood = new THREE.MeshStandardMaterial({ ...tex(() => T.planks(95, { size: 256, repeat: [1, 3], color: '#8a5a32' })), roughness: 0.8 });
+    return { wall: (f) => (f === 0 ? stone : wood), frame: mat('#5a3a22', { roughness: 0.8 }), win: 'capiz', roof: 'tile' };
+  }
+  if (id === 'condo') {
+    const c = T.canvas(256, 256), x = c.getContext('2d');
+    const gr = x.createLinearGradient(0, 0, 256, 256); gr.addColorStop(0, '#9ab8d0'); gr.addColorStop(1, '#4a6a8a'); x.fillStyle = gr; x.fillRect(0, 0, 256, 256);
+    x.fillStyle = '#d8dde0'; for (let k = 0; k <= 4; k++) x.fillRect(k * 64 - 3, 0, 6, 256); x.fillRect(0, 0, 256, 8); x.fillRect(0, 248, 256, 8);
+    const t = T.toTex(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1);
+    const glass = new THREE.MeshStandardMaterial({ map: t, roughness: 0.08, metalness: 0.75, envMapIntensity: 1.5 });
+    return { wall: () => glass, frame: mat('#d8d8d4', { roughness: 0.5 }), win: 'none', roof: 'helipad' };
+  }
+  const paints = ['#f2d8a8', '#bfe0d0', '#f4c6b4', '#d8d4f0', '#f6e7a8'], ps = paints.map((p, f) => new THREE.MeshStandardMaterial({ ...tex(() => T.concrete(50 + f, p, { size: 256, repeat: [3, 2], grime: 0.8 })), roughness: 0.9 }));
+  return { wall: (f) => ps[f % ps.length], frame: null, win: 'jalousie', roof: 'deck' };
+}
+
+function buildHouse(parent, { x, z, w, d }, styleId = 'apartment') {
+  const ST = houseStyle(styleId);
   const g = new THREE.Group(); g.position.set(x, 0, z); parent.add(g);
   const FH = 3, FLOORS = 5;
   const conc = new THREE.MeshStandardMaterial({ ...(() => { const t = T.concrete(41, '#b4b0a8', { size: 256, repeat: [2, 2], grime: 0.6 }); return { map: t.map, normalMap: t.normalMap }; })(), roughness: 0.92 });
@@ -386,20 +414,24 @@ function buildHouse(parent, { x, z, w, d }) {
   const floors = [];
   for (let f = 0; f < FLOORS; f++) {
     const fg = new THREE.Group(); fg.position.y = f * FH; g.add(fg);
-    const paint = new THREE.MeshStandardMaterial({ ...(() => { const t = T.concrete(50 + f, paints[f % paints.length], { size: 256, repeat: [3, 2], grime: 0.8 }); return { map: t.map, normalMap: t.normalMap }; })(), roughness: 0.9 });
+    const paint = ST.wall(f), frame = ST.frame || conc;
     // columns at the corners and the middle of each side
     const cols = [];
-    for (const cx of [-w / 2, 0, w / 2]) for (const cz of [-d / 2, d / 2]) { const c = box(0.3, FH, 0.3, conc, { x: cx, y: FH / 2, z: cz }); fg.add(c); cols.push(c); }
+    for (const cx of [-w / 2, 0, w / 2]) for (const cz of [-d / 2, d / 2]) { const c = box(0.3, FH, 0.3, frame, { x: cx, y: FH / 2, z: cz }); fg.add(c); cols.push(c); }
     // rebar sticking up from each column top, while this is the floor being built
     const bars = new THREE.Group();
     for (const c of cols) for (const [a, b] of [[-0.08, -0.08], [0.08, -0.08], [-0.08, 0.08], [0.08, 0.08]]) bars.add(cyl(0.012, 0.012, 0.9, rebarM, { x: c.position.x + a, y: FH + 0.45, z: c.position.z + b }, 5));
     fg.add(bars);
     // the slab on top (a roof deck on the last floor)
-    const slab = box(w + 0.4, 0.18, d + 0.4, conc, { y: FH - 0.09 }); fg.add(slab);
+    const slab = box(w + 0.4, 0.18, d + 0.4, frame, { y: FH - 0.09 }); fg.add(slab);
     // once the floor is done: plastered, painted walls with windows (dark glass, jalousie slats) and a door
     const done = new THREE.Group(); fg.add(done);
     done.add(box(w - 0.3, WH, 0.16, paint, { y: WH / 2, z: d / 2 }), box(w - 0.3, WH, 0.16, paint, { y: WH / 2, z: -d / 2 }), box(0.16, WH, d - 0.3, paint, { x: -w / 2, y: WH / 2 }), box(0.16, WH, d - 0.3, paint, { x: w / 2, y: WH / 2 }));
-    for (const wx of winX(f)) { done.add(box(1.3, 1.2, 0.05, glassM, { x: wx, y: 1.55, z: d / 2 + 0.07, cast: false })); for (let s = 0; s < 6; s++) done.add(box(1.3, 0.03, 0.04, mat('#dfe6ea', { metalness: 0.6, roughness: 0.3 }), { x: wx, y: 1.02 + s * 0.2, z: d / 2 + 0.1, rx: 0.5, cast: false })); done.add(box(1.45, 0.08, 0.12, mat('#e8e2d6'), { x: wx, y: 0.9, z: d / 2 + 0.1 })); }
+    for (const wx of ST.win === 'none' ? [] : winX(f)) {
+      if (ST.win === 'jalousie') { done.add(box(1.3, 1.2, 0.05, glassM, { x: wx, y: 1.55, z: d / 2 + 0.07, cast: false })); for (let s = 0; s < 6; s++) done.add(box(1.3, 0.03, 0.04, mat('#dfe6ea', { metalness: 0.6, roughness: 0.3 }), { x: wx, y: 1.02 + s * 0.2, z: d / 2 + 0.1, rx: 0.5, cast: false })); done.add(box(1.45, 0.08, 0.12, mat('#e8e2d6'), { x: wx, y: 0.9, z: d / 2 + 0.1 })); }
+      else if (ST.win === 'capiz') { done.add(box(1.5, 1.3, 0.05, mat('#efe6cc', { roughness: 0.4, emissive: '#ffd890', emissiveIntensity: 0.05 }), { x: wx, y: 1.6, z: d / 2 + 0.07, cast: false })); for (let s = 0; s < 4; s++) done.add(box(0.03, 1.3, 0.06, mat('#5a3a22'), { x: wx - 0.56 + s * 0.375, y: 1.6, z: d / 2 + 0.09, cast: false })); for (let s = 0; s < 4; s++) done.add(box(1.5, 0.03, 0.06, mat('#5a3a22'), { x: wx, y: 1.0 + s * 0.4, z: d / 2 + 0.09, cast: false })); }
+      else { done.add(box(1.2, 1.1, 0.05, mat('#2a1e14'), { x: wx, y: 1.55, z: d / 2 + 0.07, cast: false })); const sh = box(1.25, 1.1, 0.05, paint, { x: wx, y: 2.2, z: d / 2 + 0.38 }); sh.rotation.x = -1.0; done.add(sh); }
+    }
     if (f === 0) done.add(box(1.0, 2.1, 0.06, mat('#6a4a2a', { roughness: 0.7 }), { x: 0, y: 1.05, z: d / 2 + 0.08 }));
     mergeStatic(done); mergeStatic(bars);
     floors.push({ g: fg, bars, slab, done, cols, layout: layout(f) });
@@ -408,7 +440,18 @@ function buildHouse(parent, { x, z, w, d }) {
   const deck = new THREE.Group(); deck.position.y = FLOORS * FH; deck.visible = false; g.add(deck);
   deck.add(box(w + 0.4, 0.8, 0.14, conc, { y: 0.4, z: d / 2 + 0.13 }), box(w + 0.4, 0.8, 0.14, conc, { y: 0.4, z: -d / 2 - 0.13 }), box(0.14, 0.8, d + 0.4, conc, { x: w / 2 + 0.13, y: 0.4 }), box(0.14, 0.8, d + 0.4, conc, { x: -w / 2 - 0.13, y: 0.4 }));
   deck.add(cyl(0.6, 0.6, 1.3, mat('#2a4a8a', { roughness: 0.5 }), { x: 2.6, y: 1.4, z: -1 }, 18), box(1.4, 0.7, 1.4, conc, { x: 2.6, y: 0.35, z: -1 }));
-  const flag = new THREE.Group(); flag.position.set(-3.4, 0, 1.6); deck.add(flag);
+  if (ST.roof === 'nipa' || ST.roof === 'tile') {
+    // a steep pyramid roof over the top floor instead of a deck
+    deck.clear();
+    let roofM;
+    if (ST.roof === 'nipa') { const c = T.canvas(128, 128), x2 = c.getContext('2d'); x2.fillStyle = '#8a6a3a'; x2.fillRect(0, 0, 128, 128); for (let k = 0; k < 900; k++) { const v = 110 + Math.random() * 70; x2.strokeStyle = `rgb(${v},${v * 0.78 | 0},${v * 0.45 | 0})`; x2.beginPath(); const px = Math.random() * 128, py = Math.random() * 128; x2.moveTo(px, py); x2.lineTo(px + (Math.random() - 0.5) * 3, py + 10); x2.stroke(); } const t = T.toTex(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 2); roofM = new THREE.MeshStandardMaterial({ map: t, roughness: 1 }); }
+    else roofM = mat('#a8442a', { roughness: 0.7 });
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(Math.hypot(w, d) / 2 + 0.6, ST.roof === 'nipa' ? 4 : 2.6, 4, 1), roofM); cone.rotation.y = Math.PI / 4; cone.scale.set(w / Math.hypot(w, d) * 1.414, 1, d / Math.hypot(w, d) * 1.414); cone.position.y = (ST.roof === 'nipa' ? 4 : 2.6) / 2; cone.castShadow = true; deck.add(cone);
+  } else if (ST.roof === 'helipad') {
+    const c = T.canvas(256, 256), x2 = c.getContext('2d'); x2.fillStyle = '#3a3c40'; x2.fillRect(0, 0, 256, 256); x2.strokeStyle = '#ffd23f'; x2.lineWidth = 10; x2.beginPath(); x2.arc(128, 128, 100, 0, TAU); x2.stroke(); x2.fillStyle = '#fff'; x2.font = '900 150px "Barlow Condensed", sans-serif'; x2.textAlign = 'center'; x2.textBaseline = 'middle'; x2.fillText('H', 128, 136);
+    deck.add(mesh(new THREE.PlaneGeometry(d - 0.2, d - 0.2), new THREE.MeshStandardMaterial({ map: T.toTex(c), roughness: 0.8 }), { y: 0.03, x: -1.2, rx: -Math.PI / 2, cast: false }));
+  }
+  const flag = new THREE.Group(); flag.position.set(ST.roof === 'nipa' || ST.roof === 'tile' ? w / 2 + 0.4 : -3.4, ST.roof === 'nipa' || ST.roof === 'tile' ? -0.2 : 0, 1.6); deck.add(flag);
   flag.add(cyl(0.025, 0.025, 3.2, mat('#dddddd', { metalness: 0.6, roughness: 0.3 }), { y: 1.6 }, 8));
   const flagC = T.canvas(120, 60), fx = flagC.getContext('2d');
   fx.fillStyle = '#0038a8'; fx.fillRect(0, 0, 120, 30); fx.fillStyle = '#ce1126'; fx.fillRect(0, 30, 120, 30); fx.fillStyle = '#fff'; fx.beginPath(); fx.moveTo(0, 0); fx.lineTo(52, 30); fx.lineTo(0, 60); fx.fill();
@@ -452,7 +495,7 @@ function buildHouse(parent, { x, z, w, d }) {
   }
   setProgress(0, 0);
   const lights = (on) => { glassM.emissiveIntensity = on ? 1.4 : 0; };
-  return { group: g, setProgress, flag: flagMesh, lights, FLOORS, FH, get done() { return shown; }, top: () => Math.min(FLOORS, shown + (shownK > 0 ? 1 : 0)) * FH };
+  return { group: g, setProgress, flag: flagMesh, lights, FLOORS, FH, get done() { return shown; }, get courses() { return shownK; }, top: () => Math.min(FLOORS, shown + (shownK > 0 ? 1 : 0)) * FH };
 }
 
 // ---------- the street: houses facing the site, a sari-sari store, poles, wires, trees ----------

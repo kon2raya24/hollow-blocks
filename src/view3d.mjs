@@ -16,10 +16,13 @@ import { CS, KEYS, TYPE_KEY, FEEL, makeMaterials, blockGeometry, ghostTexture, G
 import { buildSite, WELL, BASE_Y } from './site.mjs';
 import { createFx } from './fx.mjs';
 import { createPost } from './post.mjs';
+import { mergeGeometries } from './vendor/three-extra.min.js';
 import { person, posePerson, kapatasLook, parade as makeParade } from './folk.mjs';
 import { dress } from './envpack.mjs';
 import { foremanModel, driveForeman, foremanEvent } from './foreman.mjs';
 import { buildCrowd } from './crowd.mjs';
+import { createToolFx } from './toolfx.mjs';
+import { TOOLS } from './game.mjs';
 
 const TAU = Math.PI * 2;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -105,6 +108,11 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   const mats = makeMaterials();
   const fx = createFx(scene, mats, { floorY: 0 });
   post.hideFromAO([fx.group]);
+  const tfx = createToolFx(scene, { cx, cy, top: WELL.top, fx, CS });
+  // a toolbox: a red steel box with a handle, on the face of the cell that carries it
+  const tbGeo = (() => { const a = new THREE.BoxGeometry(0.26, 0.17, 0.08); a.translate(0, -0.02, 0); const b = new THREE.TorusGeometry(0.06, 0.016, 6, 12, Math.PI); b.translate(0, 0.065, 0); const g2 = mergeGeometries([a.toNonIndexed(), b.toNonIndexed()].map((x) => { x.deleteAttribute('uv'); return x; })); return g2; })();
+  const toolbox = new THREE.InstancedMesh(tbGeo, new THREE.MeshStandardMaterial({ color: '#d8322a', roughness: 0.35, metalness: 0.4, emissive: '#ff5a2a', emissiveIntensity: 0.6 }), 24);
+  toolbox.count = 0; toolbox.frustumCulled = false; scene.add(toolbox);
 
   // ---------- the blocks, instanced per material ----------
   const MAXB = 270, blocks = {};
@@ -323,6 +331,25 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         if (!reduced) kickV -= 0.045;
         break;
       }
+      case 'tool': {
+        tfx.play(e); reactKapatas(e.tool === 'merienda' ? 'point' : 'cheer');
+        const NAME = { martilyo: 'MARTILYO!', semento: 'SEMENTO!', kreyn: 'KREYN!', pison: 'PISON!', merienda: 'MERIENDA!' };
+        fx.callout(NAME[e.tool], 0, WELL.top - 1.5, 1.4, { color: 'orange', height: 0.9, life: 1.2 });
+        break;
+      }
+      case 'toolEarned': {
+        fx.callout(`+ ${e.tool.toUpperCase()}`, WELL.x0 - 0.6, WELL.y1 - 1, 1.4, { color: 'gold', height: 0.6, life: 1.6, rise: 1.2 });
+        for (let k = 0; k < 24; k++) fx.spark(rnd(-2.5, 2.5), rnd(1, 9), 0.4, '#ffd27a', { vx: rnd(-1, 1), vy: rnd(1, 3), vz: rnd(0, 1), size: 0.06, grow: 0, life: 0.6, a: 1, grav: 0.3 });
+        break;
+      }
+      case 'lindol': {
+        if (!reduced) shake = 0.35;
+        for (let k = 0; k < 20; k++) fx.puff(rnd(-6, 6), 0.1, rnd(-2, 4), '#cbbca4', { size: rnd(0.6, 1.2), vy: rnd(0.2, 0.8), life: rnd(1, 1.8), a: 0.4 });
+        fx.callout('LINDOL!', 0, WELL.top - 1.5, 1.4, { color: 'orange', height: 1.0, life: 1.3 });
+        reactKapatas('cheer'); kap.react = 'worry'; kap.reactT = 1.8;
+        break;
+      }
+      case 'perfect': fx.callout('MALINIS!', 0, cy(17), 1.4, { color: 'gold', height: 1.2, life: 1.8 }); fx.confetti(0, WELL.y1, 1.2, 140); cheerT = 3; break;
       case 'gameover': {
         collapsed = true; reactKapatas('slump');
         // the wall comes down: every block breaks and falls forward off the scaffold
@@ -342,7 +369,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   }
 
   // ---------- each frame ----------
-  const opts = { cine: true, live: false };
+  const opts = { cine: true, live: false }, pieceAt = { x: 0, y: 6 };
   let o0 = {};
   let clock = 0, danger = false;
   function frame(g, dt, o = {}) {
@@ -368,7 +395,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     let top = ROWS; if (g) for (let i = 0; i < g.board.length; i++) if (g.board[i]) { top = Math.floor(i / COLS); break; }
     danger = !!g && g.phase === 'play' && top < HIDDEN + 5;
     dangerK = lerp(dangerK, danger ? 1 : 0, Math.min(1, dt * 4));
-    const kState = kap.react === 'victory' || kap.react === 'cheer' ? 'cheer' : kap.react === 'slump' ? 'slump' : kap.react === 'point' ? 'point' : danger ? 'worry' : 'idle';
+    const kState = kap.react === 'victory' || kap.react === 'cheer' ? 'cheer' : kap.react === 'slump' ? 'slump' : kap.react === 'point' ? 'point' : danger || kap.react === 'worry' ? 'worry' : 'idle';
     const lookYaw = Math.atan2(tgt.x - kap.x, 4) * 0.8 - 0.4, lookP = -Math.atan2(tgt.y - 1.7, 4) * 0.5;
     if (kap.real) {
       kap.crafted.root.visible = false;
@@ -395,7 +422,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
 
     // ---------- blocks ----------
     for (const im of Object.values(blocks)) im.count = 0;
-    ghost.count = 0;
+    ghost.count = 0; toolbox.count = 0;
     drips.visible = false;
     riseT = Math.max(0, riseT - dt / 0.16);
     spawnT = Math.max(0, spawnT - dt / 0.1); rotT = Math.max(0, rotT - dt / 0.09); holdT = Math.max(0, holdT - dt / 0.2);
@@ -412,7 +439,9 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         for (let x = 0; x < COLS; x++) {
           const v = g.board[y * COLS + x]; if (!v) continue;
           const key = v === 1 ? (orient[y * COLS + x] ? 'kawayanV' : 'kawayan') : KEYS[v];
-          put(key, cx(x), Y, 0, 1, dangerK > 0.05 && y < HIDDEN + 6 ? dangerK * 0.12 * (0.5 + 0.5 * Math.sin(t * 8)) : 0, tint);
+          const box = g.boxes && g.boxes.some(([bx, by]) => bx === x && by === y);
+          put(key, cx(x), Y, 0, 1, (dangerK > 0.05 && y < HIDDEN + 6 ? dangerK * 0.12 * (0.5 + 0.5 * Math.sin(t * 8)) : 0) + (box ? 0.35 + 0.25 * Math.sin(t * 6) : 0), tint);
+          if (box && toolbox.count < 24) { m4.compose(vp.set(cx(x), Y, CS * 0.45), q0, vs.set(1, 1, 1)); toolbox.setMatrixAt(toolbox.count++, m4); }
         }
       }
       // the mud runs: a couple of drops sliding down the face of each mud cell
@@ -437,7 +466,12 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         }
 
         let sx = 0, sy = 0;
-        for (const [x, y] of cellsOf(cur)) { put(key, cx(x), cy(y), 0, s, glow); sx += cx(x); sy += cy(y); }
+        cellsOf(cur).forEach(([x, y], i) => {
+          const box = cur.tool === i;
+          put(key, cx(x), cy(y), 0, s, glow + (box ? 0.6 + 0.4 * Math.sin(t * 9) : 0)); sx += cx(x); sy += cy(y);
+          if (box && y >= 0) { m4.compose(vp.set(cx(x), cy(y), CS * 0.45 * s), q0, vs.set(1.1, 1.1, 1.1)); toolbox.setMatrixAt(toolbox.count++, m4); }
+        });
+        pieceAt.x = sx / 4; pieceAt.y = sy / 4;
         pieceLight.position.set(sx / 4, sy / 4, 1.0); pieceLight.color.set(GHOST_COLORS[cur.type]); pieceLight.intensity = 2.2 + lk * 3;
       } else pieceLight.intensity = 0;
     } else pieceLight.intensity = 0;
@@ -456,6 +490,8 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       else slots.forEach((type, i) => mini(type, nb.cx, top0 - (i === 0 ? 0 : nb.h * 0.08 + i * nb.h * 0.148), (i === 0 ? hs : hs * 0.78) * (i === 0 ? 1 + spawnT * 0.08 : 1), i === 0 ? 1 : 0.88, i === 0 ? 0.1 : 0));
       site.drawTally(g.mode === 'bagyo' && g.rise ? [['Oras', fmt(g.elapsed)], ['Bayanihan', g.stats.bayanihan], ['T-spin', g.stats.tspins], ['Baha', `${Math.ceil(g.rise.t / 60)}s`]] : [['Oras', fmt(g.elapsed)], ['Bayanihan', g.stats.bayanihan], ['T-spin', g.stats.tspins], ['Combo', Math.max(0, g.stats.maxCombo)]]);
     }
+    toolbox.instanceMatrix.needsUpdate = true; toolbox.visible = toolbox.count > 0;
+    tfx.update(dt, { slowT: g ? g.slowT || 0 : 0, piece: pieceAt, kick: () => { if (!reduced) kickV -= 0.05; } });
     for (const im of Object.values(blocks)) { im.visible = im.count > 0; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; im.geometry.attributes.aGlow.needsUpdate = true; }
 
     // ---------- the parade ----------
@@ -496,7 +532,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     else if (o.mode === 'pause') { target = shots.pause(); rate = 2.5; }
     else if (o.mode === 'results') {
       target = shots.results(t); rate = 1.6;
-      if (cam.mode !== 'results' && g) { const h = site.house.group.position, n = 1 + Math.floor(g.lines / 10); fx.callout(`${n} PALAPAG`, h.x, site.house.top() + 1.6, h.z + 3, { color: 'gold', height: 2.1, life: 60, rise: 0.3, delay: 0.2 }); }
+      if (cam.mode !== 'results' && g && camera.aspect > 1.1) { const h = site.house.group.position, n = 1 + Math.floor(g.lines / 10); fx.callout(`${n} PALAPAG`, h.x, site.house.top() + 1.6, h.z + 3, { color: 'gold', height: 2.1, life: 60, rise: 0.3, delay: 0.2 }); }
     }
     else { target = shots.title(t); rate = cam.mode === 'title' ? 1 : 1.2; }
     // coming from another shot, ease into the play framing instead of jumping (then it holds still)
@@ -546,6 +582,8 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   applyTod('golden', null, 0, 1);
   return {
     frame, event, resize, post, renderer, scene, setEnv, setPeople, setCrowd, kapHead, screenOf,
+    setHouseStyle(id) { site.setHouseStyle(id); },
+    celebrate() { fx.confetti(0, WELL.top + 1, 1.2, 220); cheerT = 4; reactKapatas('victory'); if (!reduced) flashK = 0.2; },
     get cellPx() { return cellPx; }, get cine() { return cine; }, get busy() { return fx.busy; },
     setInsets(top, bottom) { insets = { top, bottom }; fit(); }, setAngled(b) { angled = b; fit(); },
     setShadows(on) { sun.castShadow = on; },

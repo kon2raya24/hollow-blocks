@@ -2,7 +2,7 @@
 // Cells are [x, y] in the piece's box, x to the right and y down; rotation states are 0, R, 2, L.
 export const TYPES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
 export const ID = { I: 1, O: 2, T: 3, S: 4, Z: 5, J: 6, L: 7 }; // board values; 8 is mud from the flood
-export const MUD = 8;
+export const MUD = 8, CEMENT = 9; // 8 is mud from the flood (and rubble); 9 is semento poured into holes
 
 export const MATERIALS = {
   I: { name: 'Kawayan', color: '#b9c95a', dark: '#7f8f2f' },
@@ -13,6 +13,7 @@ export const MATERIALS = {
   J: { name: 'Baldosa', color: '#4a7fd6', dark: '#2a4f96' },
   L: { name: 'Adobe', color: '#d98a3a', dark: '#9a5a1f' },
   [MUD]: { name: 'Putik', color: '#6b5a3e', dark: '#4a3e2a' },
+  [CEMENT]: { name: 'Semento', color: '#9a9d9c', dark: '#6e7170' },
 };
 
 const BASE = {
