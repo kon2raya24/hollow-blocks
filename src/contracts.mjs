@@ -4,8 +4,8 @@
 const MIN = 60 * 60, SEC = 60;
 // Pars come from the bot playing every contract at a strong human's pace (8 ticks between keys,
 // about 1.3 pieces a second): three stars is about its time; two is a comfortable, steady game.
-// Diskarte (ml1), Sunod-sunod (ml2) and Tatlong T-spin (bs4) need T-spins and combos the bot doesn't
-// play: their pars are set for a person. Unang Bayanihan (sr5) is benchmarked with the bot's Bayanihan style.
+// Diskarte (ml1) and Tatlong T-spin (bs4) are proven with the bot taking T-spins, Sunod-sunod (ml2) with its
+// 3-wide combo style; their pars are set for a person. Unang Bayanihan (sr5) uses the bot's Bayanihan style.
 // star: { by: 'time' (seconds, lower is better) | 'pieces' (lower is better) | 'score' | 'lines' (higher), two, three }
 export const CONTRACTS = [
   // Barangay San Roque: learning the trade
@@ -16,7 +16,7 @@ export const CONTRACTS = [
   { id: 'sr5', brgy: 0, name: 'Unang Bayanihan', brief: 'Apat na hanay nang sabay. Ipunin ang kawayan!', goal: { bayanihan: 1 }, star: { by: 'time', two: 45, three: 22 } },
   // Barangay Malinta: tricks of the trade
   { id: 'ml1', brgy: 1, name: 'Diskarte', brief: 'Dalawang T-spin. Iikot ang ladrilyo papasok!', goal: { tspins: 2 }, star: { by: 'time', two: 150, three: 90 } },
-  { id: 'ml2', brgy: 1, name: 'Sunod-sunod', brief: 'Apat na sunod-sunod na clear (combo ×4).', goal: { combo: 4 }, star: { by: 'time', two: 110, three: 60 } },
+  { id: 'ml2', brgy: 1, name: 'Sunod-sunod', brief: 'Limang sunod-sunod na clear (combo ×4).', goal: { combo: 4 }, star: { by: 'time', two: 110, three: 60 } },
   { id: 'ml3', brgy: 1, name: 'Ulan sa Gabi', brief: 'Tumagal nang 90 segundo habang tumataas ang putik.', goal: { survive: 90 * SEC }, rise: { start: 420, fastest: 240, step: 20 }, star: { by: 'lines', two: 24, three: 40 } },
   { id: 'ml4', brgy: 1, name: 'Lindol!', brief: 'Kumita ng ₱6,000 kahit lumilindol tuwing 30 segundo.', goal: { score: 6000 }, lindol: 30 * SEC, star: { by: 'time', two: 100, three: 60 } },
   { id: 'ml5', brgy: 1, name: 'Mabilisang Kontrata', brief: 'Dalawampung hanay sa 2:30, simula sa ika-5 palapag.', goal: { lines: 20 }, limit: 150 * SEC, startLevel: 5, star: { by: 'time', two: 85, three: 55 } },

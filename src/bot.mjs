@@ -35,7 +35,25 @@ function evaluate(board, p, style = null) {
     v += (high ? 0 : -9 * inWell - W.wells * wellR - W.rowT * rowR) + (rows.length === 4 ? 120 : rows.length && !high ? -30 : 0);
   }
   if (style === 'tspin') v += SLOT * Math.min(1, tSlots(after));
+  if (style === 'combo') return comboValue(board, after, p, rows.length, holes, v);
   return v;
+}
+
+// The 3-wide combo: stack the left seven columns and keep the right three open, then run the well
+// down one clear per piece, as many pieces in a row as the stack allows.
+const WELL = COLS - 3;
+function comboShape(b) {
+  let stack = ROWS, residue = 0, top = ROWS;
+  for (let x = 0; x < WELL; x++) { let y = 0; while (y < ROWS && !b[y * COLS + x]) y++; stack = Math.min(stack, y); }
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (b[y * COLS + x]) { if (x >= WELL) residue++; top = Math.min(top, y); }
+  return { stack: ROWS - stack, residue, top: ROWS - top }; // stack: the left side's lowest column; residue: cells in the well; top: the highest
+}
+function comboValue(before, after, p, cleared, holes, base) {
+  const was = comboShape(before), now = comboShape(after), inWell = cellsOf(p).filter(([x]) => x >= WELL).length;
+  const running = was.stack >= 2 && (was.residue > 0 || was.stack >= 6);
+  if (running && cleared) return 300 - 60 * holes - 25 * Math.max(0, now.residue - 3) + base * 0.05;
+  if (was.top >= 11) return base; // too high: play it safe and clear anything
+  return base - 40 * inWell; // building (or a piece that can't keep the run): a clean stack beside the well
 }
 
 // Open T-spin double slots: a T pointing down would fit, rest, and fill two rows with three corners set.
@@ -144,11 +162,13 @@ export function chooseSpin(g, style = 'tspin') {
 export const TUNE = { spin: 40 };
 const MEM = new WeakMap();
 
-// pace: ticks between key presses (a person-like rhythm on the title screen).
-export function bot(g, { pace = 0, style = null } = {}) {
+// pace: ticks between key presses (a person-like rhythm on the title screen). spins: take T-spins too
+// ('soft' holds down until the piece lands).
+export function bot(g, { pace = 0, style = null, spins = false } = {}) {
   if (g.phase !== 'play' || !g.cur) return NOINPUT;
   let m = MEM.get(g);
-  if (!m || m.piece !== g.pieces) { const c = choose(g, style); m = { piece: g.pieces, keys: c?.keys || ['hard'], land: c?.land || null, wait: pace }; MEM.set(g, m); }
+  if (!m || m.piece !== g.pieces) { const c = spins ? chooseSpin(g, style || 'tspin') : choose(g, style); m = { piece: g.pieces, keys: c?.keys || ['hard'], land: c?.land || null, wait: pace }; MEM.set(g, m); }
+  if (m.keys[0] === 'soft') { if (fits(g.board, { ...g.cur, y: g.cur.y + 1 })) return { pressed: [], held: ['down'] }; m.keys.shift(); m.wait = pace; return NOINPUT; }
   if (m.wait-- > 0) return NOINPUT;
   m.wait = pace;
   // in the wind the piece drifts, so steer to where it should land instead of replaying the keys
