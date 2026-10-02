@@ -15,16 +15,16 @@ export function createGoogleAds({ test = false, onChange = () => {}, mute = () =
   document.head.appendChild(s);
   push({ preloadAdBreaks: 'on', sound: 'on' });
 
-  let showFn = null, pending = null, wait = 20e3, timer = 0;
+  let showFn = null, pending = null, wait = 4e3, timer = 0;
   const settle = (ok) => { const p = pending; pending = null; if (p) p(ok); };
-  // ask for the next rewarded ad; with none to give, ask again later, less often each time
+  // ask for the next rewarded ad; with none to give (or none loaded yet), ask again soon, then less often
   function ask() {
     clearTimeout(timer);
     let offered = false;
     push({
       type: 'reward', name: 'gantimpala',
       beforeAd: () => mute(true), afterAd: () => mute(false),
-      beforeReward: (fn) => { offered = true; showFn = fn; wait = 20e3; onChange(true); },
+      beforeReward: (fn) => { offered = true; showFn = fn; wait = 4e3; onChange(true); },
       adViewed: () => settle(true),
       adDismissed: () => settle(false),
       adBreakDone: () => {
