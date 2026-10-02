@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fil">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google-adsense-account" content="ca-pub-5860144532070180">
+<title>Privacy · Hollow Blocks</title>
+<meta name="description" content="Paano iniingatan ng Hollow Blocks ang iyong datos: ang laro, ang account, ang Ranking at ang mga patalastas. How Hollow Blocks handles your data.">
+<meta name="theme-color" content="#1a1720">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+  :root { --ink: #fff8e1; --muted: #e8d8c8; --gold: #ffd23f; --line: #d8c9a0; --bg: #1a1720; --card: #241d2c; }
+  :root[data-theme="light"] { --ink: #241a12; --muted: #5a4a3c; --gold: #9a5a00; --line: #c8b48a; --bg: #fbf6ea; --card: #fffdf6; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --ink: #241a12; --muted: #5a4a3c; --gold: #9a5a00; --line: #c8b48a; --bg: #fbf6ea; --card: #fffdf6; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  a { color: var(--gold); }
+  h1 { margin: 0 0 4px; font-size: clamp(28px, 6vw, 40px); line-height: 1.1; }
+  .sub { margin: 0 0 24px; color: var(--muted); }
+  h2 { margin: 32px 0 8px; font-size: 20px; color: var(--gold); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 4px 20px 12px; margin-top: 16px; }
+  .en { color: var(--muted); font-size: 15px; }
+  ul { padding-left: 20px; } li { margin: 4px 0; }
+  .back { display: inline-block; margin-bottom: 20px; }
+  footer { margin-top: 32px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="./">← Bumalik sa laro · Back to the game</a>
+  <h1>Privacy · Pribasiya</h1>
+  <p class="sub">Hollow Blocks, ni Lemmuel Turaya · Huling binago: 2 Oktubre 2026 · Last updated October 2, 2026</p>
+
+  <section>
+    <h2>Sa madaling salita · In short</h2>
+    <ul>
+      <li>Puwede kang maglaro nang walang account. Nasa browser mo lang ang progreso mo.<br><span class="en">You can play without an account; your progress then stays in your browser.</span></li>
+      <li>Ang account ay pangalan at password lang. Walang email, walang tunay na pangalan.<br><span class="en">An account is just a name and a password: no email, no real name.</span></li>
+      <li>Hindi namin ibinebenta ang datos mo.<br><span class="en">We don't sell your data.</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Sa browser mo · Stored in your browser</h2>
+    <p>Itinatabi ng laro sa <i>localStorage</i> ng browser mo ang progreso (XP, barya, medalya, bituin, mga nabili), ang mga setting at pindutan, ang mga replay at larawan ng mga naitayong bahay, at, kung naka-login ka, isang session token. Nananatili ito sa device mo at nabubura kapag binura mo ang browser data.</p>
+    <p class="en">The game keeps your progress, settings and key bindings, replays, house pictures and, if you're logged in, a session token in your browser's localStorage. It stays on your device and is removed when you clear your browser data. The game also caches its own files so it can be played offline.</p>
+  </section>
+
+  <section>
+    <h2>Kung gagawa ka ng account · If you make an account</h2>
+    <ul>
+      <li><b>Pangalan at password.</b> Ang password ay naka-hash (scrypt); hindi namin ito nababasa.<br><span class="en">Your name, and your password stored only as a scrypt hash, which we can't read.</span></li>
+      <li><b>Cloud save:</b> ang progreso mo, para maibalik mo ito sa ibang device o pagkatapos burahin ang browser data.<br><span class="en">A copy of your progress, so you can restore it on another device or after clearing your browser.</span></li>
+      <li><b>Ranking:</b> ang pangalan mo, ang pinakamagandang iskor mo sa bawat talaan, at ang replay ng larong iyon. <b>Pampubliko ito</b>: makikita at mapapanood ng lahat.<br><span class="en">Your name, your best score on each board and that game's replay. These are public: anyone can see them and watch the replay.</span></li>
+      <li><b>IP address:</b> ginagamit lang sa mga panangga laban sa bot at pang-aabuso (halimbawa, ilang beses sinubukang mag-login). Hindi ito iniuugnay sa account mo, at nawawala ang mga bilang na ito sa loob ng isang oras.<br><span class="en">Used only for limits against bots and abuse, such as counting login attempts. These counters aren't tied to your account and expire within an hour.</span></li>
+    </ul>
+    <p class="en">This data is stored with Upstash (a Redis database) through Vercel, which hosts the game.</p>
+  </section>
+
+  <section>
+    <h2>Mga patalastas · Advertising</h2>
+    <p>Maaaring magpakita ang laro ng mga patalastas mula sa Google AdSense, at <b>sa pagpili mo lang</b>: isang button na pipindutin mo kapalit ng gantimpala sa laro. Walang patalastas na sasabat habang naglalaro. Puwedeng patayin ang mga alok sa Ayos (Settings).</p>
+    <ul class="en">
+      <li>Third-party vendors, including Google, use cookies to serve ads based on a user's prior visits to this website or other websites.</li>
+      <li>Google's use of advertising cookies enables it and its partners to serve ads to users based on their visits to this site and/or other sites on the Internet.</li>
+      <li>You may opt out of personalized advertising by visiting <a href="https://adssettings.google.com" rel="noopener">Google Ads Settings</a>. You can also opt out of some third-party vendors' use of cookies for personalized advertising at <a href="https://www.aboutads.info/choices/" rel="noopener">aboutads.info</a>.</li>
+      <li>Learn more in <a href="https://policies.google.com/technologies/partner-sites" rel="noopener">how Google uses information from sites that use its services</a>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Iba pang serbisyo · Other services</h2>
+    <ul class="en">
+      <li><b>Google Fonts</b> supplies the game's lettering, so your browser asks Google's servers for it.</li>
+      <li><b>Vercel</b> and <b>GitHub Pages</b> host the game and keep standard server logs.</li>
+      <li>There are no analytics or tracking scripts.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Mga bata · Children</h2>
+    <p>Para sa lahat ng edad ang laro, at hindi kailangan ng anumang personal na impormasyon para maglaro o gumawa ng account. Kung magulang ka at nais mong burahin ang account ng anak mo, makipag-ugnayan sa amin.</p>
+    <p class="en">The game is for all ages, and no personal information is needed to play or to make an account. If you're a parent and want your child's account removed, contact us.</p>
+  </section>
+
+  <section>
+    <h2>Pagbura at pakikipag-ugnayan · Deletion and contact</h2>
+    <p>Para burahin ang account mo, ang cloud save at ang mga puwesto mo sa Ranking, o para magtanong, makipag-ugnayan sa <a href="https://kon2raya.netlify.app/#contact" rel="noopener">kon2raya.netlify.app</a>. Ibigay ang pangalan ng account mo.</p>
+    <p class="en">To delete your account, its cloud save and your Ranking entries, or to ask anything about this page, get in touch through <a href="https://kon2raya.netlify.app/#contact" rel="noopener">kon2raya.netlify.app</a> and include your account name. Clearing your browser data removes everything stored on your device.</p>
+  </section>
+
+  <footer>Kapag binago ang pahinang ito, babaguhin din ang petsa sa itaas. · If this page changes, the date above changes with it.</footer>
+</main>
+</body>
+</html>

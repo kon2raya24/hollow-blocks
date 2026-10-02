@@ -1265,7 +1265,7 @@ function openAccount() {
         <p class="acct-err" id="acct-err" role="alert"></p>
         <button type="submit" class="primary">${reg ? 'Gumawa at mag-login' : 'Mag-login'}</button>
       </form>
-      <p class="note">${reg ? 'Ang progreso mo sa device na ito ay dadalhin sa bagong account. <b>Walang email:</b> tandaan ang password mo.' : 'Mag-login para maibalik ang progreso mo at makasali sa Ranking, kahit na-clear ang browser.'}</p>`;
+      <p class="note">${reg ? 'Ang progreso mo sa device na ito ay dadalhin sa bagong account. <b>Walang email:</b> tandaan ang password mo.' : 'Mag-login para maibalik ang progreso mo at makasali sa Ranking, kahit na-clear ang browser.'} <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>`;
     for (const b of $('account-body').querySelectorAll('[data-tab]')) b.onclick = () => { acctTab = b.dataset.tab; openAccount(); };
     if (reg) online.prepare(); // the puzzle solves while the name is typed
     $('acct-form').onsubmit = async (e) => {
