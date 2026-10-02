@@ -1,7 +1,7 @@
 // Offline play: the game's own files (three.js and the sounds included) are cached on install and
 // served cache-first; the webfont, the scanned site (assets/env) and the foreman (assets/people, on the
 // Vercel deploy) are cached the first time they load. Bump VERSION whenever a file changes.
-const VERSION = 'hollowblocks-v18';
+const VERSION = 'hollowblocks-v19';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',

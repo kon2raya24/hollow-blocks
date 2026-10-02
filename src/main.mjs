@@ -451,6 +451,7 @@ function onMatch(out) {
   for (const e of out.x) {
     if (e.type === 'attack') {
       if (view) view.attack(e.from, e.sent, e.cancelled);
+      if (e.from === 1 && e.sent > 0) scorePop(`+${e.sent} PUTIK`, [], 'orange'); else if (e.from === 0 && e.cancelled > 0) scorePop(`HARANG ${e.cancelled}`, [], 'blue');
       if (e.from === 1 && e.sent >= 2) { rivalSays('send'); A.event({ type: 'rise' }); }
       if (e.from === 0 && e.n >= 3) rivalSays('hurt');
       if (e.from === 0 && e.sent > 0) buzz(20);
@@ -579,13 +580,13 @@ function onEvent(e) {
     case 'rise': if (Math.random() < 0.35) say('rise'); hint('bagyo', 'Tumataas ang baha mula sa ilalim! Punuin ang butas para matanggal ang putik.'); break;
     case 'hardDrop': break;
     case 'toolEarned': toast(touch ? `Bagong gamit: ${e.tool.toUpperCase()}! Pindutin ang kahon.` : `May bagong gamit: ${e.tool.toUpperCase()}! Pindutin ang E para gamitin.`, 2400); buzz([10, 20, 10]); break;
-    case 'tool': say('tool', true); break;
-    case 'lindol': say('lindol', true); break;
+    case 'tool': say('tool', true); scorePop(`${e.tool.toUpperCase()}!`, [], 'orange'); break;
+    case 'lindol': say('lindol', true); scorePop('LINDOL!', [], 'orange'); break;
     case 'perfect': big('MALINIS!', 'Perfect clear', 1.6); break;
     case 'stamp': inspSays('stamp'); buzz(30); break;
-    case 'passed': inspSays('passed'); break;
-    case 'gust': hint('hangin', 'Hangin: dumudulas ang piraso sa direksyon ng hangin. Bantayan ang palaso!'); break;
-    case 'lights': if (!e.on) hint('brownout', 'Brownout! Ang flashlight lang ang ilaw: sundan ang piraso.'); break;
+    case 'passed': inspSays('passed'); scorePop(`PASADO +${3 * e.n}s`, [], 'green'); break;
+    case 'gust': scorePop(e.dir > 0 ? 'HANGIN →' : '← HANGIN', [], 'blue'); hint('hangin', 'Hangin: dumudulas ang piraso sa direksyon ng hangin. Bantayan ang palaso!'); break;
+    case 'lights': if (e.on) scorePop('MAY ILAW NA!', [], 'gold'); if (!e.on) hint('brownout', 'Brownout! Ang flashlight lang ang ilaw: sundan ang piraso.'); break;
     case 'crumble': hint('bitak', 'May bitak ang piraso: guguho ito pagkatapos ng ilang piraso.'); break;
     case 'andamyo': big('ANDAMYO!', e.why === 'topout' ? 'Sinalo ng andamyo ang pader!' : 'Sinalo ang putik', 1.4); break;
     case 'gameover': if (game && game.insp) inspSays('lost', true); if (!match) speak('lose'); else say('over', true); if (lesson) verdict('fail'); else if (!match) finish(false); break;
@@ -1164,9 +1165,12 @@ function streakDay() {
 // A provider says whether an ad is ready and plays one, resolving to whether it was watched to the end.
 // Google's (googleads.mjs) is ready only once AdSense has an ad to give, so offers appear only then;
 // ?ads=test plays a stand-in instead, and the test page (?test=1) has none.
-const AD_PROVIDER = Q.get('ads') === 'test' ? { ready: () => true, show: testAd }
-  : TEST ? null
-  : createGoogleAds({ test: Q.get('adtest') === '1', onChange: () => refreshOffers(), mute: (on) => A.setMuted(on || data.muted) });
+// Google's comes a few seconds after the title is up, so its scripts don't slow the game's first load
+let AD_PROVIDER = Q.get('ads') === 'test' ? { ready: () => true, show: testAd } : null;
+function startAds() {
+  if (AD_PROVIDER || TEST) return;
+  AD_PROVIDER = createGoogleAds({ test: Q.get('adtest') === '1', onChange: () => refreshOffers(), mute: (on) => A.setMuted(on || data.muted) });
+}
 // an ad came ready or went: the screen showing offers shows them again
 let lastDouble = 0;
 function refreshOffers() {
@@ -1276,9 +1280,31 @@ async function sendScore(codeP) {
   let code;
   try { code = await codeP; } catch { return 'Hindi maipadala ang replay dito.'; }
   const r = await online.submit(code);
+  if (r.status === 0) { queueScore(code); return 'Walang koneksyon: ipapadala kapag may internet na.'; }
   if (!r.ok) return r.error || 'Hindi naipadala.';
   return `#${r.rank} sa ${boardName(r.board)} (sa ${r.of})${r.improved ? ' · bagong best sa Ranking!' : ` · best mo: ${fmtVal(r.board, r.best)}`}`;
 }
+// games finished without a connection wait here (this browser only, the newest five) and go when it's back
+const PKEY = 'hollowblocks.pending';
+function queueScore(code) {
+  try { const q = JSON.parse(localStorage.getItem(PKEY) || '[]'); if (!q.includes(code)) q.push(code); localStorage.setItem(PKEY, JSON.stringify(q.slice(-5))); } catch { /* storage off: this one is lost */ }
+}
+let flushing = false;
+async function flushScores() {
+  if (flushing || !online.user || TEST) return;
+  let q; try { q = JSON.parse(localStorage.getItem(PKEY) || '[]'); } catch { return; }
+  if (!q.length) return;
+  flushing = true;
+  const left = [];
+  for (const code of q) {
+    const r = await online.submit(code);
+    if (r.status === 0) { left.push(code); continue; } // still offline: try later
+    if (r.ok) toast(`Naipadala ang laro: #${r.rank} sa ${boardName(r.board)}${r.improved ? ' · bagong best!' : ''}`, 2600);
+  }
+  try { if (left.length) localStorage.setItem(PKEY, JSON.stringify(left)); else localStorage.removeItem(PKEY); } catch { /* fine */ }
+  flushing = false;
+}
+addEventListener('online', () => flushScores());
 const fmtVal = (b, v) => (b.startsWith('deadline.') ? clock(v) : peso(v));
 function boardName(b) { const [m, d] = b.split('.'); return `${RANKED[m]}${byDiff(m) ? ` · ${DIFFICULTY[d].name}` : ''}`; }
 function boardKey(m, d) { return byDiff(m) ? `${m}.${d}` : m === 'daily' ? `daily.${dateKey()}` : `lingguhan.${weeklyEvent().week}`; }
@@ -1565,7 +1591,8 @@ async function boot() {
   }
   streakDay(); labels();
   show('title');
-  if (online.user && !TEST) sync();
+  if (online.user && !TEST) { sync(); setTimeout(flushScores, 4000); }
+  setTimeout(startAds, 3000);
   try { if (sessionStorage.getItem('hollowblocks.restored')) { sessionStorage.removeItem('hollowblocks.restored'); setTimeout(() => toast(`Naibalik ang progreso ni ${online.user} · Progress restored`, 3200), 900); } } catch { /* no session storage */ }
   requestAnimationFrame((n) => { last = n; requestAnimationFrame(frame); });
   setTimeout(() => $('curtain').classList.add('off'), 250);

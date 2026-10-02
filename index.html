@@ -340,7 +340,7 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
 #finesse.side { transform: none; bottom: 30%; } #finesse.top { bottom: auto; top: calc(max(10px, env(safe-area-inset-top)) + 54px); }
 #pops { position: absolute; pointer-events: none; display: grid; gap: 2px; text-align: left; }
 #pops b { font: italic 900 34px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; color: #fff8e1; text-shadow: 0 3px 0 rgba(0,0,0,.55), 0 0 14px rgba(0,0,0,.5); }
-#pops b.pink { color: #ff8ae2; } #pops span { font: italic 900 22px/1 "Barlow Condensed", sans-serif; letter-spacing: .04em; color: #ffd23f; text-shadow: 0 2px 0 rgba(0,0,0,.55); } #pops span.money { color: #8ef08a; }
+#pops b.pink { color: #ff8ae2; } #pops b.orange { color: #ffa24a; } #pops b.blue { color: #9ad7ff; } #pops b.green { color: #8ef08a; } #pops b.gold { color: var(--gold); } #pops span { font: italic 900 22px/1 "Barlow Condensed", sans-serif; letter-spacing: .04em; color: #ffd23f; text-shadow: 0 2px 0 rgba(0,0,0,.55); } #pops span.money { color: #8ef08a; }
 #pops.go { animation: popsRise 1.4s ease-out forwards; }
 @keyframes popsRise { 0% { opacity: 0; transform: translateY(14px) scale(.9); } 12% { opacity: 1; transform: translateY(0) scale(1.04); } 25% { transform: none; } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-22px); } }
 @media (prefers-reduced-motion: reduce) { #pops.go { animation: none; } }
@@ -349,10 +349,10 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
 /* touch: everything you tap is at least about 40px */
 body.touch .corner button { min-height: 42px; min-width: 42px; padding: 4px 12px; }
 @media (max-width: 560px) { #pause-btn button span { display: none; } } /* a phone: just ❚❚, clear of the next-piece board */
-body.touch input[type=range] { height: 34px; }
-body.touch .kchip button { min-width: 32px; min-height: 32px; font-size: 16px; }
+body.touch input[type=range] { height: 40px; }
+body.touch .kchip button { min-width: 40px; min-height: 40px; font-size: 16px; }
 body.touch .kt .add { min-height: 40px; }
-.acct-form ~ .note a, .note a[href="privacy.html"] { display: inline-block; padding: 6px 2px; }
+.acct-form ~ .note a, .note a[href="privacy.html"] { display: inline-block; padding: 10px 4px; }
 /* a short landscape screen (a phone on its side): the title fits without scrolling */
 @media (max-height: 500px) and (orientation: landscape) {
   #title { gap: 5px; padding-top: 6px; padding-bottom: 30px; }

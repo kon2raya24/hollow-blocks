@@ -399,20 +399,20 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         if (!reduced) { kickV -= 0.03; flashK = Math.max(flashK, 0.08); }
         break;
       }
-      case 'passed': fx.callout(`PASADO +${3 * e.n}s`, 0, WELL.top - 2, 1.3, { color: 'green', height: 0.6, life: 1.2 }); break;
-      case 'lights': if (e.on) { fx.callout('MAY ILAW NA!', 0, WELL.top - 1.6, 1.3, { color: 'gold', height: 0.6, life: 1 }); if (!reduced) flashK = Math.max(flashK, 0.1); } else fx.callout('BROWNOUT!', 0, WELL.top - 1.6, 1.3, { color: 'blue', height: 0.8, life: 1.2 }); break;
+      case 'passed': if (!opts.pops) fx.callout(`PASADO +${3 * e.n}s`, 0, WELL.top - 2, 1.3, { color: 'green', height: 0.6, life: 1.2 }); break;
+      case 'lights': if (e.on) { if (!opts.pops) fx.callout('MAY ILAW NA!', 0, WELL.top - 1.6, 1.3, { color: 'gold', height: 0.6, life: 1 }); if (!reduced) flashK = Math.max(flashK, 0.1); } else fx.callout('BROWNOUT!', 0, WELL.top - 1.6, 1.3, { color: 'blue', height: 0.8, life: 1.2 }); break;
       case 'wind': case 'gust': {
         const d = e.dir;
         for (let k = 0; k < (e.type === 'gust' ? 40 : 12); k++) fx.puff(-d * rnd(2.5, 3.5), rnd(0.5, 10.5), rnd(0.3, 0.9), '#d8ccb0', { size: rnd(0.15, 0.35), vx: d * rnd(5, 9), vy: rnd(-0.3, 0.3), vz: 0, life: rnd(0.6, 1.1), a: 0.35 });
-        if (e.type === 'gust') fx.callout(d > 0 ? 'HANGIN · SA KANAN' : 'HANGIN · SA KALIWA', 0, WELL.top - 1.5, 1.3, { color: 'blue', height: 0.55, life: 1.2 });
+        if (e.type === 'gust' && !opts.pops) fx.callout(d > 0 ? 'HANGIN · SA KANAN' : 'HANGIN · SA KALIWA', 0, WELL.top - 1.5, 1.3, { color: 'blue', height: 0.55, life: 1.2 });
         break;
       }
       case 'crumble': for (const [x, y] of e.cells) { for (let k = 0; k < 3; k++) fx.chunk('semento', cx(x), cy(y), 0.2, rnd(-1, 1), rnd(0, 2), rnd(0.5, 2), rnd(0.05, 0.1)); fx.puff(cx(x), cy(y), 0.3, '#cfc4b0', { size: rnd(0.4, 0.7), vy: 0.3, vz: 0.8, life: 1, a: 0.45 }); } fx.callout('GUMUHO!', cx(e.cells[0][0]), cy(e.cells[0][1]) + 0.4, 1.2, { color: 'orange', height: 0.5, life: 1 }); break;
-      case 'andamyo': fx.callout(e.why === 'topout' ? 'SINALO NG ANDAMYO!' : 'ANDAMYO!', 0, e.why === 'topout' ? WELL.top - 2 : cy(19), 1.3, { color: 'gold', height: 0.7, life: 1.4 }); if (!reduced) shake = 0.25; if (e.cells) for (const [x, y, v] of e.cells) fx.chunk(KEYS[v] || 'hollow', cx(x), cy(y), 0.2, rnd(-2, 2), rnd(-1, 2), rnd(1, 3), rnd(0.06, 0.11)); break;
+      case 'andamyo': if (!opts.pops) fx.callout(e.why === 'topout' ? 'SINALO NG ANDAMYO!' : 'ANDAMYO!', 0, e.why === 'topout' ? WELL.top - 2 : cy(19), 1.3, { color: 'gold', height: 0.7, life: 1.4 }); if (!reduced) shake = 0.25; if (e.cells) for (const [x, y, v] of e.cells) fx.chunk(KEYS[v] || 'hollow', cx(x), cy(y), 0.2, rnd(-2, 2), rnd(-1, 2), rnd(1, 3), rnd(0.06, 0.11)); break;
       case 'garbage': {
         riseT = 1; orient = shiftUp(orient, e.rows);
         for (let x = 0; x < COLS; x++) { fx.puff(cx(x), BASE_Y + 0.1, 0.4, '#6a5038', { size: rnd(0.3, 0.6), vy: rnd(0.4, 1.4), vz: rnd(0.4, 1.4), life: 0.9, a: 0.6 }); fx.chunk('putik', cx(x) + rnd(-0.2, 0.2), BASE_Y + 0.2, 0.3, rnd(-1.2, 1.2), rnd(1.5, 3.5), rnd(0.5, 2), rnd(0.03, 0.06)); }
-        fx.callout(`+${e.rows} PUTIK`, 0, cy(ROWS - e.rows) + 0.4, 1.2, { color: 'orange', height: 0.7, life: 1.2 });
+        if (!opts.pops) fx.callout(`+${e.rows} PUTIK`, 0, cy(ROWS - e.rows) + 0.4, 1.2, { color: 'orange', height: 0.7, life: 1.2 });
         if (!reduced) kickV -= 0.04 + e.rows * 0.01;
         reactKapatas('cheer'); kap.react = 'worry'; kap.reactT = 1.4;
         break;
@@ -426,7 +426,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       case 'tool': {
         tfx.play(e); reactKapatas(e.tool === 'merienda' ? 'point' : 'cheer');
         const NAME = { martilyo: 'MARTILYO!', semento: 'SEMENTO!', kreyn: 'KREYN!', pison: 'PISON!', merienda: 'MERIENDA!', plumada: 'PLUMADA!', barena: 'BARENA!', andamyo: 'ANDAMYO!' };
-        fx.callout(NAME[e.tool], 0, WELL.top - 1.5, 1.4, { color: 'orange', height: 0.9, life: 1.2 });
+        if (!opts.pops) fx.callout(NAME[e.tool], 0, WELL.top - 1.5, 1.4, { color: 'orange', height: 0.9, life: 1.2 });
         break;
       }
       case 'toolEarned': {
@@ -437,11 +437,11 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       case 'lindol': {
         if (!reduced) shake = 0.35;
         for (let k = 0; k < 20; k++) fx.puff(rnd(-6, 6), 0.1, rnd(-2, 4), '#cbbca4', { size: rnd(0.6, 1.2), vy: rnd(0.2, 0.8), life: rnd(1, 1.8), a: 0.4 });
-        fx.callout('LINDOL!', 0, WELL.top - 1.5, 1.4, { color: 'orange', height: 1.0, life: 1.3 });
+        if (!opts.pops) fx.callout('LINDOL!', 0, WELL.top - 1.5, 1.4, { color: 'orange', height: 1.0, life: 1.3 });
         reactKapatas('cheer'); kap.react = 'worry'; kap.reactT = 1.8;
         break;
       }
-      case 'perfect': fx.callout('MALINIS!', 0, cy(17), 1.4, { color: 'gold', height: 1.2, life: 1.8 }); fx.confetti(0, WELL.y1, 1.2, 140); cheerT = 3; break;
+      case 'perfect': if (!opts.pops) fx.callout('MALINIS!', 0, cy(17), 1.4, { color: 'gold', height: 1.2, life: 1.8 }); fx.confetti(0, WELL.y1, 1.2, 140); cheerT = 3; break;
       case 'gameover': {
         collapsed = true; reactKapatas('slump');
         // the wall comes down: every block breaks and falls forward off the scaffold
@@ -500,8 +500,8 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     const sx = from ? rig.RX : 0, tx = from ? WELL.x0 - 0.4 : rig.RX + (WELL.x0 - 0.4) * rig.S, y0 = from ? ry(8) : cy(8);
     // (the rival's side sits forward, on its deck)
     for (let k = 0; k < Math.min(24, 4 + n * 3); k++) fx.chunk('putik', sx + rnd(-1, 1), y0 + rnd(-1, 1), 0.6, (tx - sx) * rnd(0.55, 0.8), rnd(2.5, 5), rnd(0.3, 1.2), rnd(0.05, 0.1));
-    if (n > 0) fx.callout(`+${n} PUTIK`, from ? WELL.x0 - 0.4 : tx, (from ? cy(14) : ry(14)), from ? 1.3 : rig.Z + 1.3, { color: 'orange', height: from ? 0.62 : 0.62 * Math.max(0.7, rig.S), life: 1.4, delay: 0.25 });
-    if (cancelled > 0) fx.callout(`HARANG ${cancelled}`, from ? rig.RX : 0, (from ? ry(6) : cy(6)), 1.3, { color: 'blue', height: 0.5, life: 1.1, delay: 0.1 });
+    if (n > 0 && !(from && opts.pops)) fx.callout(`+${n} PUTIK`, from ? WELL.x0 - 0.4 : tx, (from ? cy(14) : ry(14)), from ? 1.3 : rig.Z + 1.3, { color: 'orange', height: from ? 0.62 : 0.62 * Math.max(0.7, rig.S), life: 1.4, delay: 0.25 });
+    if (cancelled > 0 && (from || !opts.pops)) fx.callout(`HARANG ${cancelled}`, from ? rig.RX : 0, (from ? ry(6) : cy(6)), 1.3, { color: 'blue', height: 0.5, life: 1.1, delay: 0.1 });
   }
   function setVersus(on, prof = null) {
     if (on && !rig) rig = buildRivalRig(scene);
