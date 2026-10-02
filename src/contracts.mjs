@@ -70,6 +70,16 @@ export function unlocked(progress, id) {
   if (prev.brgy !== c.brgy) return brgyStars(progress, prev.brgy) >= 8;
   return (progress[prev.id] || 0) > 0;
 }
+// why a contract is still shut: the one before needs a star, the barangay before needs 8, or chapter 2
+// is closed; null when it's open
+export function lockReason(progress, id) {
+  const i = CONTRACTS.findIndex((c) => c.id === id);
+  if (i <= 0 || unlocked(progress, id)) return null;
+  const c = CONTRACTS[i], prev = CONTRACTS[i - 1];
+  if (c.brgy === 3 && prev.brgy === 2) return { kind: 'chapter', have: CONTRACTS.filter((x) => x.brgy < 3).reduce((a, x) => a + (progress[x.id] || 0), 0), need: 30 };
+  if (prev.brgy !== c.brgy) return { kind: 'brgy', brgy: prev.brgy, have: brgyStars(progress, prev.brgy), need: 8 };
+  return { kind: 'prev', prev };
+}
 export const brgyStars = (progress, b) => CONTRACTS.filter((c) => c.brgy === b).reduce((a, c) => a + (progress[c.id] || 0), 0);
 // the description of a contract's goal and twist, for its card
 export function describe(c) {

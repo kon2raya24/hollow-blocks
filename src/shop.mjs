@@ -40,6 +40,11 @@ export function canBuy(item, p) {
   if (isOwned(item, p) || !item.price) return false;
   return (p.coins || 0) >= (item.price.coins || 0) && (p.tokens || 0) >= (item.price.tokens || 0);
 }
+// what a buy still needs (0s when it can be paid); null for an item that is never sold
+export function shortfall(item, p) {
+  if (!item.price) return null;
+  return { coins: Math.max(0, (item.price.coins || 0) - (p.coins || 0)), tokens: Math.max(0, (item.price.tokens || 0) - (p.tokens || 0)) };
+}
 export function buy(item, p) {
   if (!canBuy(item, p)) return { ok: false, p };
   return { ok: true, p: { ...p, coins: p.coins - (item.price.coins || 0), tokens: p.tokens - (item.price.tokens || 0), owned: [...(p.owned || []), item.id] } };

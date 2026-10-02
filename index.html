@@ -141,7 +141,7 @@ body.touch #tools { display: none !important; }
 .brgy h3 small { float: right; color: var(--ink); font-size: 15px; }
 .job { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 8px; margin: 4px 0; transform: none; text-align: left; font-size: 15px; min-height: 40px; padding: 6px 12px; }
 .job i { font-style: normal; color: #ffd23f; letter-spacing: 0; white-space: nowrap; }
-.job[disabled] { opacity: .45; cursor: not-allowed; filter: grayscale(1); }
+.job[disabled], .job[aria-disabled="true"] { opacity: .45; cursor: not-allowed; filter: grayscale(1); }
 .brief { max-width: 460px; text-align: left; }
 .brief h3 { margin: 0; font: italic 900 30px/1 "Barlow Condensed", sans-serif; color: var(--gold); text-transform: uppercase; }
 .brief small { display: block; font: italic 800 12px/1 "Barlow Condensed", sans-serif; letter-spacing: .18em; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
@@ -172,7 +172,7 @@ body.touch #tools { display: none !important; }
 .rcard b { font: italic 900 19px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; letter-spacing: .04em; }
 .rcard small { font: italic 800 11px/1.1 "Barlow Condensed", sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .rcard em { font: italic 800 12px/1 "Barlow Condensed", sans-serif; letter-spacing: .1em; text-transform: uppercase; padding: 2px 8px; margin-top: 3px; background: var(--rc); color: #1a1010; clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
-.rcard .won { position: absolute; top: 6px; right: 6px; } .rcard[disabled] { opacity: .4; filter: grayscale(1); cursor: not-allowed; }
+.rcard .won { position: absolute; top: 6px; right: 6px; } .rcard[disabled], .rcard[aria-disabled="true"] { opacity: .4; filter: grayscale(1); cursor: not-allowed; }
 .rcard .num { position: absolute; top: 6px; left: 8px; font: italic 900 16px/1 "Barlow Condensed", sans-serif; color: var(--muted); }
 .rival { max-width: 470px; display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; text-align: left; align-items: center; border-color: var(--rc, var(--line)); }
 .rival .ico { grid-row: span 3; } .rival h3 { margin: 0; font: italic 900 34px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; color: var(--gold); }
@@ -325,6 +325,13 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
 .trialnote { display: block; color: #b8e6b2; font-size: 12px; }
 .adlayer { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(8,5,10,.88); }
 .adcard { width: min(420px, 90vw); display: grid; gap: 10px; text-align: center; }
+#nope { padding: 0; border: 0; background: transparent; color: var(--ink); max-width: 92vw; overflow: visible; }
+#nope::backdrop { background: rgba(8,5,10,.78); backdrop-filter: blur(2px); }
+#nope .card { width: min(420px, 92vw); display: grid; gap: 8px; text-align: center; border-color: var(--gold); }
+#nope .ico { color: var(--gold); margin: 0 auto; } #nope h3 { margin: 0; font: italic 900 30px/1 "Barlow Condensed", sans-serif; letter-spacing: .04em; color: var(--gold); text-transform: uppercase; }
+#nope p { margin: 0; font-size: 16px; line-height: 1.4; } #nope p b { color: var(--gold); } #nope small { color: var(--muted); font-size: 13px; }
+#nope .row { justify-content: center; margin-top: 6px; }
+button[aria-disabled="true"] { opacity: .5; filter: grayscale(.7); cursor: not-allowed; }
 .adcard small { letter-spacing: .2em; color: #b8e6b2; } .adleft { font: italic 900 72px/1 "Barlow Condensed", sans-serif; color: var(--gold); }
 /* keeping the well clear (main.mjs keepClear): the top chip's callout, a hint beside the well */
 #callout { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 5; max-width: min(46vw, 440px); padding: 4px 18px 5px; text-align: center; pointer-events: none;
@@ -505,6 +512,10 @@ body.touch .kt .add { min-height: 40px; }
       <div class="row"><button type="button" class="primary" id="brief-go">Simulan · Start</button><button type="button" class="adbtn" id="brief-ad" hidden><i data-icon="play"></i> Simulan na may gamit<small>patalastas</small></button><button type="button" id="brief-lesson" hidden></button><button type="button" id="brief-back">Bumalik · Back</button></div>
     </section>
 
+    <dialog id="nope" aria-labelledby="nope-title" aria-describedby="nope-text">
+      <div class="card"><span class="ico" id="nope-ico"></span><h3 id="nope-title"></h3><p id="nope-text"></p><small id="nope-hint"></small>
+        <div class="row"><button type="button" id="nope-go" hidden></button><button type="button" class="primary" id="nope-ok">Sige · OK</button></div></div>
+    </dialog>
     <div class="adlayer" id="ad" hidden role="dialog" aria-modal="true" aria-label="Patalastas">
       <div class="card adcard">
         <small>PATALASTAS · TEST AD</small>

@@ -205,6 +205,7 @@ export function createAudio({ base = 'assets/sfx/' } = {}) {
         case 'garbage': tone(70, 0.4, 'sawtooth', 0.05, 0, 0.7); play('soft', 0.7, 0.6); play('heavy', 0.3, 0.7, 0.05); break;
         case 'gameover': hiss(1.6, 600, 0.26, 0, 'lowpass', 60); for (let k = 0; k < 6; k++) play(k % 2 ? 'mining' : 'heavy', 0.45, 0.6 + Math.random() * 0.3, k * 0.09); [67, 64, 60, 55].forEach((n, i) => tone(NOTE(n), 0.4, 'triangle', 0.07, 0.2 + i * 0.28)); break;
         case 'done': [67, 71, 74, 79, 74, 79, 83].forEach((n, i) => tone(NOTE(n), 0.16, 'square', 0.05, i * 0.11)); break;
+        case 'nope': tone(330, 0.09, 'square', 0.035); tone(247, 0.16, 'square', 0.035, 0.1); break;
         case 'go': [67, 74, 79].forEach((n, i) => tone(NOTE(n), 0.12, 'triangle', 0.05, i * 0.1)); break;
         default: break;
       }

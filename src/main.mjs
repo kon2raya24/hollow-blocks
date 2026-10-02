@@ -8,11 +8,11 @@ import { createRecorder, record, encode, decode, startPlayback, playTick, runToE
 import { LESSONS, lessonById, lessonFor, lessonGame, judge, createCoach, coachTick } from './training.mjs';
 import { DEF_KEYS_P1, DEF_KEYS_P2, routes, createInput, press as pressIn, drain, clearInput as clearIn } from './controls.mjs';
 import { ranked } from './bot.mjs';
-import { ITEMS, KINDS, itemById, isOwned, canBuy, buy, equip, unlockMet, coinsFor, DEFAULT_EQUIP } from './shop.mjs';
+import { ITEMS, KINDS, itemById, isOwned, canBuy, buy, equip, unlockMet, coinsFor, DEFAULT_EQUIP, shortfall } from './shop.mjs';
 import { hapticFor, apply as applyHaptic } from './haptics.mjs';
 import { createVoice, VOICE_LINES } from './voice.mjs';
 import { createAudio } from './audio.mjs';
-import { CONTRACTS, BARANGAYS, CHAPTERS, chapterOpen, contractById, starsFor, unlocked, brgyStars, describe } from './contracts.mjs';
+import { CONTRACTS, BARANGAYS, CHAPTERS, chapterOpen, contractById, starsFor, unlocked, brgyStars, describe, lockReason } from './contracts.mjs';
 import { icon, portrait } from './icons.mjs';
 import { createOnline, RANKED, byDiff } from './online.mjs';
 import { createGoogleAds } from './googleads.mjs';
@@ -350,10 +350,14 @@ function openTapatan() {
   const clash = T.src[0] !== 'keys' && T.src[0] === T.src[1];
   $('tapatan-body').innerHTML = col(0) + col(1) + (clash ? `<p class="capnote warn">${icon('warn', 20)} Iisang controller ang dalawang manlalaro. Pumili ng iba.</p>` : '');
   for (const b of $('tapatan-body').querySelectorAll('[data-tk]')) b.onclick = () => { const v = b.dataset.v; T[b.dataset.tk][+b.dataset.tp] = isNaN(+v) ? v : +v; persist(); openTapatan(); };
-  $('tap-go').disabled = clash;
+  $('tap-go').setAttribute('aria-disabled', String(clash));
   show('tapatan');
 }
-$('tap-go').onclick = () => { tap = { wins: [0, 0], round: 1 }; data.mode = 'tapatan'; start(); };
+$('tap-go').onclick = () => {
+  const T = data.tap;
+  if (T.src[0] !== 'keys' && T.src[0] === T.src[1]) { nope({ title: 'Iisang controller', text: 'Pareho ang kontrol ng dalawang manlalaro. Pumili ng ibang kontrol para sa isa sa kanila.', hint: 'Both players are on the same controller. Pick another for one of them.', ico: 'warn' }); return; }
+  tap = { wins: [0, 0], round: 1 }; data.mode = 'tapatan'; start();
+};
 $('tap-keys').onclick = () => { remapTarget = 'p1'; openKeys(); };
 
 // ---------- replays: kept on the device, best Deadline, Karera and Daily, and the last game ----------
@@ -464,6 +468,35 @@ function onMatch(out) {
   }
   let top = 99; for (let i = 0; i < match.b.board.length; i++) if (match.b.board[i]) { top = Math.floor(i / 10); break; }
   if (top < 6 && match.phase === 'play') rivalSays('danger');
+}
+
+// ---------- "Hindi pa puwede": a box that says why something can't be done yet, and what would open it ----------
+// o: { title, text (html), hint, ico, go: { label, run } a way there }
+function nope(o) {
+  const d = $('nope');
+  $('nope-ico').innerHTML = icon(o.ico || 'lock', 40); $('nope-title').textContent = o.title; $('nope-text').innerHTML = o.text; $('nope-hint').textContent = o.hint || '';
+  $('nope-hint').hidden = !o.hint;
+  const go = $('nope-go'); go.hidden = !o.go;
+  if (o.go) { go.textContent = o.go.label; go.onclick = () => { closeNope(); o.go.run(); }; }
+  A.event({ type: 'nope' }); buzz([30, 40, 30]);
+  if (!d.open) d.showModal();
+  $('nope-ok').focus();
+}
+function closeNope() { if ($('nope').open) $('nope').close(); }
+$('nope-ok').onclick = closeNope;
+$('nope').addEventListener('click', (e) => { if (e.target === $('nope')) closeNope(); }); // a tap outside the card
+const coinsTxt = (n) => `${icon('barya', 16)} ${n.toLocaleString('en-US')}`, tokTxt = (n) => `${icon('token', 16)} ${n}`;
+function rankNeed(r) { const need = RANKS[r].xp - (data.xp || 0); return `ranggong <b>${RANKS[r].name}</b>${need > 0 ? ` · kulang pa ng ${need.toLocaleString('en-US')} XP` : ''}`; }
+function nopeContract(c) {
+  const why = lockReason(data.stars, c.id);
+  if (!why) return;
+  if (why.kind === 'prev') nope({ title: 'Sarado pa', text: `Tapusin muna ang <b>${why.prev.name}</b> (kahit 1 ★) para mabuksan ang <b>${c.name}</b>.`, hint: 'Finish the contract before it first.', go: { label: `Buksan ang ${why.prev.name}`, run: () => openBrief(why.prev) } });
+  else if (why.kind === 'brgy') nope({ title: 'Sarado pa', text: `Kailangan ng <b>${why.need} ★</b> sa Brgy. ${BARANGAYS[why.brgy]}. Mayroon kang ${why.have} ★, kulang pa ng <b>${why.need - why.have} ★</b>.`, hint: `Earn ${why.need} stars in the barangay before.`, ico: 'star' });
+  else nopeChapter();
+}
+function nopeChapter() {
+  const have = CONTRACTS.filter((x) => x.brgy < 3).reduce((a, x) => a + (data.stars[x.id] || 0), 0);
+  nope({ title: 'Sarado pa ang Kabanata 2', text: `Bubukas ito kapag natapos ang <b>${contractById('bs5').name}</b>, o may <b>30 ★</b> ka sa Kabanata 1. Mayroon kang ${have} ★.`, hint: 'Finish chapter 1\'s last contract, or earn 30 of its stars.', ico: 'star' });
 }
 
 // ---------- hints, callouts, the foreman's bubble ----------
@@ -610,6 +643,7 @@ const playing = () => mode === 'play' && game;
 document.addEventListener('keydown', (e) => {
   if (e.target.closest && e.target.closest('input') && e.key !== 'Escape') return; // typing a name or password
   if (adShowing) { if (e.key === 'Escape' && !$('ad').hidden) $('ad-close').click(); return; } // an ad is up: its own buttons only
+  if ($('nope').open) { if (e.key === 'Escape') { e.preventDefault(); closeNope(); } return; } // the box: Enter/Space press its buttons, Escape closes
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (capture && capture.kind === 'key') { e.preventDefault(); captured(k); return; }
   if (match && match.local && (mode === 'play' || mode === 'pause')) {
@@ -685,6 +719,12 @@ function readPad(dt) {
   const b = (i) => !!(p.buttons[i] && p.buttons[i].pressed), ax = p.axes || [];
   const edge = (name, on) => { const was = padWas[name]; padWas[name] = on; return on && !was; };
   const left = b(14) || (ax[0] || 0) < -0.5, right = b(15) || (ax[0] || 0) > 0.5, down = b(13) || (ax[1] || 0) > 0.6, up = b(12) || (ax[1] || 0) < -0.7;
+  if ($('nope').open) {
+    if (edge('mL', left) || edge('mR', right)) { const bs = [$('nope-go'), $('nope-ok')].filter((x) => !x.hidden); bs[(bs.indexOf(document.activeElement) + 1) % bs.length].focus(); }
+    if (edge('a', b(0))) document.activeElement?.click();
+    if (edge('bb', b(1))) closeNope();
+    return;
+  }
   if (capture && capture.kind === 'pad') {
     // the remap screen is waiting for a button: the first one newly pressed
     for (let i = 0; i < Math.min(16, p.buttons.length); i++) if (edge(`cap${i}`, b(i)) && capture.armed) { captured(i); return; }
@@ -861,10 +901,10 @@ let mapCh = 0;
 function openMap(ch = mapCh) {
   mode = 'map'; job = null; mapCh = ch;
   const total = CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0), open2 = chapterOpen(data.stars, 1);
-  $('map-note').innerHTML = `<span class="modes">${CHAPTERS.map((c, i) => `<button type="button" data-ch="${i}" aria-pressed="${i === ch}" ${i === 1 && !open2 ? 'disabled' : ''}>${i === 1 && !open2 ? icon('lock', 16) + ' ' : ''}${c.name}</button>`).join('')}</span><br>${total}/${CONTRACTS.length * 3} ★ · Kailangan ng 8 ★ sa isang barangay para sa susunod.${open2 ? '' : ' Kabanata 2: tapusin ang Ang Huling Bahay, o 30 ★.'}`;
-  $('map-body').innerHTML = CHAPTERS[ch].brgys.map((b) => [BARANGAYS[b], b]).map(([name, b]) => `<div class="card brgy"><h3>Brgy. ${name}<small>${brgyStars(data.stars, b)}/15 ★</small></h3>${CONTRACTS.filter((c) => c.brgy === b).map((c) => { const st = data.stars[c.id] || 0, open = unlocked(data.stars, c.id); return `<button type="button" class="job" data-job="${c.id}" ${open ? '' : 'disabled'}><span>${open ? '' : icon('lock', 18) + ' '}${c.name}</span><i>${'★'.repeat(st)}${'☆'.repeat(3 - st)}</i></button>`; }).join('')}</div>`).join('');
-  for (const bt of $('map-body').querySelectorAll('[data-job]')) bt.onclick = () => openBrief(contractById(bt.dataset.job));
-  for (const bt of $('map-note').querySelectorAll('[data-ch]')) bt.onclick = () => openMap(+bt.dataset.ch);
+  $('map-note').innerHTML = `<span class="modes">${CHAPTERS.map((c, i) => `<button type="button" data-ch="${i}" aria-pressed="${i === ch}" ${i === 1 && !open2 ? 'aria-disabled="true"' : ''}>${i === 1 && !open2 ? icon('lock', 16) + ' ' : ''}${c.name}</button>`).join('')}</span><br>${total}/${CONTRACTS.length * 3} ★ · Kailangan ng 8 ★ sa isang barangay para sa susunod.${open2 ? '' : ' Kabanata 2: tapusin ang Ang Huling Bahay, o 30 ★.'}`;
+  $('map-body').innerHTML = CHAPTERS[ch].brgys.map((b) => [BARANGAYS[b], b]).map(([name, b]) => `<div class="card brgy"><h3>Brgy. ${name}<small>${brgyStars(data.stars, b)}/15 ★</small></h3>${CONTRACTS.filter((c) => c.brgy === b).map((c) => { const st = data.stars[c.id] || 0, open = unlocked(data.stars, c.id); return `<button type="button" class="job" data-job="${c.id}" ${open ? '' : 'aria-disabled="true"'}><span>${open ? '' : icon('lock', 18) + ' '}${c.name}</span><i>${'★'.repeat(st)}${'☆'.repeat(3 - st)}</i></button>`; }).join('')}</div>`).join('');
+  for (const bt of $('map-body').querySelectorAll('[data-job]')) bt.onclick = () => { const c = contractById(bt.dataset.job); if (unlocked(data.stars, c.id)) openBrief(c); else nopeContract(c); };
+  for (const bt of $('map-note').querySelectorAll('[data-ch]')) bt.onclick = () => { if (+bt.dataset.ch === 1 && !chapterOpen(data.stars, 1)) nopeChapter(); else openMap(+bt.dataset.ch); };
   show('map');
 }
 function openBrief(c) {
@@ -893,9 +933,14 @@ function openVs() {
   mode = 'vs'; data.mode = 'versus';
   $('vs-quick').innerHTML = Object.values(LEVELS).map((l) => `<button type="button" data-lv="${l.id}">${l.name}</button>`).join('');
   $('vs-note').textContent = `${data.vs.beaten.length}/${LADDER.length} natalo · ${data.vs.wins} panalo lahat`;
-  $('vs-ladder').innerHTML = LADDER.map((r, i) => { const open = ladderOpen(data.vs.beaten, r.id), won = data.vs.beaten.includes(r.id); return `<button type="button" class="rcard" data-rv="${r.id}" style="--rc:${r.color}" ${open ? '' : 'disabled'}><span class="num">${i + 1}</span>${won ? `<span class="won">${icon('check', 22)}</span>` : open ? '' : `<span class="won">${icon('lock', 20)}</span>`}${portrait(r.color, 58)}<b>${r.name}</b><small>Brgy. ${r.brgy}</small><em>${r.tag}</em></button>`; }).join('');
+  $('vs-ladder').innerHTML = LADDER.map((r, i) => { const open = ladderOpen(data.vs.beaten, r.id), won = data.vs.beaten.includes(r.id); return `<button type="button" class="rcard" data-rv="${r.id}" style="--rc:${r.color}" ${open ? '' : 'aria-disabled="true"'}><span class="num">${i + 1}</span>${won ? `<span class="won">${icon('check', 22)}</span>` : open ? '' : `<span class="won">${icon('lock', 20)}</span>`}${portrait(r.color, 58)}<b>${r.name}</b><small>Brgy. ${r.brgy}</small><em>${r.tag}</em></button>`; }).join('');
   for (const b of $('vs-quick').querySelectorAll('[data-lv]')) b.onclick = () => openRival(b.dataset.lv);
-  for (const b of $('vs-ladder').querySelectorAll('[data-rv]')) b.onclick = () => openRival(b.dataset.rv);
+  for (const b of $('vs-ladder').querySelectorAll('[data-rv]')) b.onclick = () => {
+    const id = b.dataset.rv;
+    if (ladderOpen(data.vs.beaten, id)) { openRival(id); return; }
+    const i = LADDER.findIndex((r) => r.id === id), prev = LADDER[i - 1];
+    nope({ title: 'Hindi pa puwede', text: `Talunin muna si <b>${prev.name}</b> sa Liga bago si <b>${LADDER[i].name}</b>.`, hint: 'Beat the rival before this one first.', go: ladderOpen(data.vs.beaten, prev.id) ? { label: `Labanan si ${prev.name}`, run: () => openRival(prev.id) } : null });
+  };
   show('vs');
 }
 function openRival(id) {
@@ -1086,14 +1131,23 @@ function openShop(tab = shopTab) {
   $('shop-body').innerHTML = ITEMS.filter((it) => it.kind === tab).map((it) => { const own = isOwned(it, p), on = e[it.kind] === it.id; return `<button type="button" class="sitem ${prev && prev.id === it.id ? 'prev' : ''} ${own ? '' : 'locked'}" data-item="${it.id}" aria-pressed="${on}"><span class="swatch">${it.swatch.map((c) => `<i style="background:${c}"></i>`).join('')}</span><b>${it.name}</b><em>${on ? `${icon('check', 14)} Suot` : own ? 'Iyo na' : priceText(it)}</em></button>`; }).join('');
   if (prev) {
     const own = isOwned(prev, p), on = e[prev.kind] === prev.id, can = canBuy(prev, p);
-    const btn = on ? `<button type="button" disabled>${icon('check', 16)} Suot na</button>` : own ? `<button type="button" class="primary" id="shop-equip">Isuot · Equip</button>` : prev.price ? `<button type="button" class="primary" id="shop-buy" ${can ? '' : 'disabled'}>Bilhin ${priceText(prev)}</button>` : `<button type="button" disabled>${priceText(prev)}</button>`;
+    const btn = on ? `<button type="button" disabled>${icon('check', 16)} Suot na</button>` : own ? `<button type="button" class="primary" id="shop-equip">Isuot · Equip</button>` : prev.price ? `<button type="button" class="primary" id="shop-buy" ${can ? '' : 'aria-disabled="true"'}>Bilhin ${priceText(prev)}</button>` : `<button type="button" id="shop-locked" aria-disabled="true">${priceText(prev)}</button>`;
     const trialing = !own && onTrial(data.trials, prev.id);
     const tbtn = trialing ? (on ? '' : `<button type="button" class="primary" id="shop-trialwear">Isuot · Trial</button>`) : !own && adOk('trial') ? adBtn('shop-trial', 'Subukan nang 24 oras') : '';
     $('shop-detail').innerHTML = `<b>${prev.name}</b>${trialing ? `<small class="trialnote">Trial · ${countdown(data.trials[prev.id] - Date.now())} pa</small>` : ''}<div class="row">${btn}${tbtn}</div><p>${prev.desc}${!own && prev.price && !can ? ' <i class="muted">Kulang pa ang ipon.</i>' : ''}${!own && prev.unlock ? ` <i class="muted">Bukas kapag nakuha ang ${prev.unlock.medal ? 'medalyang ' + (MEDALS.find((m) => m.id === prev.unlock.medal)?.name || '') : 'ranggong ' + RANKS[prev.unlock.rank].name}.</i>` : ''}</p>`;
     if ($('shop-trial')) $('shop-trial').onclick = async () => { if (await watchAd('trial')) { data.trials = startTrial(data.trials, prev.id); data.equip = { ...data.equip, [prev.kind]: prev.id }; persist(); shopPrev = null; wearLooks(); toast(`Suot mo ang ${prev.name} nang 24 oras!`, 2400); openShop(tab); } };
     if ($('shop-trialwear')) $('shop-trialwear').onclick = () => { data.equip = { ...data.equip, [prev.kind]: prev.id }; persist(); shopPrev = null; wearLooks(); openShop(tab); };
     if ($('shop-equip')) $('shop-equip').onclick = () => { const r = equip(prev, profile()); if (r.ok) { data.equip = r.p.equip; persist(); shopPrev = null; wearLooks(); A.event({ type: 'levelUp' }); openShop(tab); } };
-    if ($('shop-buy')) $('shop-buy').onclick = () => { const r = buy(prev, profile()); if (r.ok) { Object.assign(data, { coins: r.p.coins, tokens: r.p.tokens, owned: r.p.owned }); const q = equip(prev, profile()); if (q.ok) data.equip = q.p.equip; persist(); shopPrev = null; wearLooks(); A.event({ type: 'ceremony' }); buzz([20, 20, 40]); toast(`Nabili: ${prev.name}!`, 1800); openShop(tab); } };
+    if ($('shop-locked')) $('shop-locked').onclick = () => nope({ title: 'Naka-lock pa', text: `Hindi ito nabibili: bubukas ang <b>${prev.name}</b> kapag nakuha mo ang ${prev.unlock.medal ? `medalyang <b>${MEDALS.find((m) => m.id === prev.unlock.medal)?.name || ''}</b> (${MEDALS.find((m) => m.id === prev.unlock.medal)?.desc || ''})` : rankNeed(prev.unlock.rank)}.`, hint: 'Not for sale: a medal or a rank opens it.' });
+    if ($('shop-buy')) $('shop-buy').onclick = () => {
+      if (!canBuy(prev, profile())) {
+        const f = shortfall(prev, profile()), short = [f.coins ? `<b>${coinsTxt(f.coins)} barya</b>` : '', f.tokens ? `<b>${tokTxt(f.tokens)} token</b>` : ''].filter(Boolean).join(' at ');
+        nope({ title: f.coins ? 'Kulang ang barya' : 'Kulang ang token', ico: f.coins ? 'barya' : 'token', text: `Ang <b>${prev.name}</b> ay ${priceText(prev)}. Mayroon kang ${coinsTxt(data.coins || 0)} at ${tokTxt(data.tokens || 0)}, kulang pa ng ${short}.`,
+          hint: [f.coins ? 'Every game earns barya.' : '', f.tokens ? 'Tokens come from the weekly event (Lingguhan).' : ''].filter(Boolean).join(' '),
+          go: f.coins && adOk('barya') ? { label: `+${OFFERS.barya.coins} barya · patalastas`, run: () => $('ad-barya')?.click() } : null });
+        return;
+      }
+      const r = buy(prev, profile()); if (r.ok) { Object.assign(data, { coins: r.p.coins, tokens: r.p.tokens, owned: r.p.owned }); const q = equip(prev, profile()); if (q.ok) data.equip = q.p.equip; persist(); shopPrev = null; wearLooks(); A.event({ type: 'ceremony' }); buzz([20, 20, 40]); toast(`Nabili: ${prev.name}!`, 1800); openShop(tab); } };
   } else $('shop-detail').innerHTML = '';
   wearLooks(prev);
   for (const b of $('shop-tabs').querySelectorAll('[data-tab]')) b.onclick = () => { shopPrev = null; openShop(b.dataset.tab); };
@@ -1406,8 +1460,12 @@ function openStats() {
     <h3 style="margin:10px 0 4px;font:italic 900 18px 'Barlow Condensed';color:#ffd23f">GAMIT SA RANGGO</h3>
     <div class="medals">${Object.entries(TOOL_RANK).map(([t, r]) => `<div class="medal ${rankOf(data.xp).index >= r ? 'got' : ''}" title="${RANKS[r].name}"><b>${icon(t, 28)}</b>${t[0].toUpperCase() + t.slice(1)} · ${RANKS[r].name}</div>`).join('')}</div>
     <h3 style="margin:10px 0 4px;font:italic 900 18px 'Barlow Condensed';color:#ffd23f">ISTILO NG BAHAY</h3>
-    <div class="modes">${STYLES.map((x) => `<button type="button" data-style="${x.id}" aria-pressed="${data.style === x.id}" ${styleOpen(data.xp, x.id) ? '' : 'disabled'}>${styleOpen(data.xp, x.id) ? x.name : icon('lock', 16) + ' ' + x.name + ' · ' + RANKS[x.rank].name}</button>`).join('')}</div>`;
-  for (const bt of $('stats-body').querySelectorAll('[data-style]')) bt.onclick = () => { data.style = bt.dataset.style; persist(); if (view) view.setHouseStyle(data.style); openStats(); };
+    <div class="modes">${STYLES.map((x) => `<button type="button" data-style="${x.id}" aria-pressed="${data.style === x.id}" ${styleOpen(data.xp, x.id) ? '' : 'aria-disabled="true"'}>${styleOpen(data.xp, x.id) ? x.name : icon('lock', 16) + ' ' + x.name + ' · ' + RANKS[x.rank].name}</button>`).join('')}</div>`;
+  for (const bt of $('stats-body').querySelectorAll('[data-style]')) bt.onclick = () => {
+    const st = STYLES.find((x) => x.id === bt.dataset.style);
+    if (!styleOpen(data.xp, st.id)) { nope({ title: 'Naka-lock pa', text: `Bubukas ang <b>${st.name}</b> sa ${rankNeed(st.rank)}.`, hint: 'Every game earns XP toward the next rank.' }); return; }
+    data.style = st.id; persist(); if (view) view.setHouseStyle(data.style); openStats();
+  };
   show('stats');
 }
 $('stats-btn').onclick = openStats;

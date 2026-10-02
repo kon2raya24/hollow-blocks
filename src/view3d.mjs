@@ -27,7 +27,14 @@ import { createFx } from './fx.mjs';
 import { createPost } from './post.mjs';
 import { mergeGeometries } from './vendor/three-extra.min.js';
 import { person, posePerson, kapatasLook, parade as makeParade } from './folk.mjs';
-// Kapatas's outfits (the shop): his crafted figure dressed differently; the motion-captured one only wears the default
+// Kapatas's outfits (the shop): the crafted figure's looks, and FITS for the motion-captured man (foreman.mjs dressForeman)
+const FITS = {
+  'fit-kapatas': {},
+  'fit-barong': { shirt: '#f8f4ea', pants: '#1e1e26', shoes: '#2a1a12' },
+  'fit-jersey': { shirt: '#e8384f', pants: '#f0f0f0' },
+  'fit-kapote': { shirt: '#ffd23f', pants: '#2a5ab8', shoes: '#3a3a3a', hat: '#2a5ab8' },
+  'fit-santa': { shirt: '#d8222a', pants: '#d8222a', shoes: '#151515', hat: 'santa' },
+};
 const OUTFITS = {
   'fit-kapatas': kapatasLook,
   'fit-barong': { ...kapatasLook, shirt: '#f2ead2', vest: null, pants: '#1e1e26', towel: false },
@@ -36,7 +43,7 @@ const OUTFITS = {
   'fit-santa': { ...kapatasLook, shirt: '#d8222a', vest: null, pants: '#d8222a', hat: null, santa: true, beard: true, towel: false, shoes: '#111111' },
 };
 import { dress } from './envpack.mjs';
-import { foremanModel, driveForeman, foremanEvent } from './foreman.mjs';
+import { foremanModel, driveForeman, foremanEvent, dressForeman } from './foreman.mjs';
 import { buildCrowd } from './crowd.mjs';
 import { createToolFx } from './toolfx.mjs';
 import { TOOLS } from './game.mjs';
@@ -539,7 +546,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     dangerK = lerp(dangerK, danger ? 1 : 0, Math.min(1, dt * 4));
     const kState = kap.react === 'victory' || kap.react === 'cheer' ? 'cheer' : kap.react === 'slump' ? 'slump' : kap.react === 'point' ? 'point' : danger || kap.react === 'worry' ? 'worry' : 'idle';
     const lookYaw = Math.atan2(tgt.x - kap.x, 4) * 0.8 - 0.4, lookP = -Math.atan2(tgt.y - 1.7, 4) * 0.5;
-    if (kap.real && kap.useReal !== false) {
+    if (kap.real) {
       kap.crafted.root.visible = false;
       driveForeman(kap.real, dt, { state: kState, x: kap.x, z: kap.z, yaw: kap.yaw, look: [tgt.x, tgt.y, 0], reduced });
     } else {
@@ -784,8 +791,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     outfitId = id;
     scene.remove(kap.crafted.root);
     kap.crafted = person(OUTFITS[id]); scene.add(kap.crafted.root);
-    kap.useReal = id === 'fit-kapatas';
-    if (kap.real && kap.real.root) kap.real.root.visible = kap.useReal;
+    if (kap.real) dressForeman(kap.real, FITS[id]);
   }
   function setTheme(id) {
     if (id === themeId) return;
@@ -813,7 +819,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   }
   function setPeople(lib) {
     foremanLib = lib;
-    try { kap.real = foremanModel(lib, scene); if (kap.real && kap.real.root && kap.useReal === false) kap.real.root.visible = false; } catch { kap.real = null; }
+    try { kap.real = foremanModel(lib, scene); dressForeman(kap.real, FITS[outfitId]); } catch { kap.real = null; }
   }
 
   resize();
