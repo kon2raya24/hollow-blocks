@@ -1197,7 +1197,7 @@ async function watchAd(kind) {
   if (!adOk(kind) || adShowing) return false;
   // everything but the ad's own layer goes inert (a real network's ad is added later, so it stays live)
   const back = document.activeElement, rest = [];
-  for (let n = $('ad'); n && n.parentElement; n = n.parentElement) for (const sib of n.parentElement.children) if (sib !== n && !sib.inert && sib.tagName !== 'SCRIPT' && (n.parentElement !== document.body || APP_NODES.includes(sib))) rest.push(sib);
+  for (let n = $('ad'); n && n !== document.body && n.parentElement; n = n.parentElement) for (const sib of n.parentElement.children) if (sib !== n && !sib.inert && sib.tagName !== 'SCRIPT' && (n.parentElement !== document.body || APP_NODES.includes(sib))) rest.push(sib);
   adShowing = true; for (const el of rest) el.inert = true;
   let ok = false;
   try { ok = await AD_PROVIDER.show(kind); } finally { adShowing = false; for (const el of rest) el.inert = false; if (back && back.isConnected) back.focus({ preventScroll: true }); }
