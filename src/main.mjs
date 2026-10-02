@@ -15,6 +15,7 @@ import { createAudio } from './audio.mjs';
 import { CONTRACTS, BARANGAYS, CHAPTERS, chapterOpen, contractById, starsFor, unlocked, brgyStars, describe } from './contracts.mjs';
 import { icon, portrait } from './icons.mjs';
 import { createOnline, RANKED, byDiff } from './online.mjs';
+import { createGoogleAds } from './googleads.mjs';
 import { canOffer, spend, left, boosted, useBoost, onTrial, startTrial, brokeStreak, canRescue, rescue, OFFERS } from './ads.mjs';
 import { xpFor, rankOf, RANKS, STYLES, styleOpen, MEDALS, newMedals, addStats, dateKey, dailySeed, shareText, toolsetFor, TOOL_RANK, weeklyEvent, countdown, WEEKLY_MEDALS, EVENTS, touchStreak } from './progress.mjs';
 
@@ -1144,11 +1145,20 @@ function streakDay() {
 }
 
 // ---------- rewarded ads (ads.mjs) ----------
-// A provider plays an ad and says whether it was watched to the end. No ad network is connected yet,
-// so there are no offers unless the page is opened with ?ads=test, which plays a stand-in. To connect
-// one, set AD_PROVIDER to a function (kind) => Promise<boolean> around the network's rewarded call,
-// and add its domains to the Content Security Policy in index.html.
-const AD_PROVIDER = Q.get('ads') === 'test' ? testAd : null;
+// A provider says whether an ad is ready and plays one, resolving to whether it was watched to the end.
+// Google's (googleads.mjs) is ready only once AdSense has an ad to give, so offers appear only then;
+// ?ads=test plays a stand-in instead, and the test page (?test=1) has none.
+const AD_PROVIDER = Q.get('ads') === 'test' ? { ready: () => true, show: testAd }
+  : TEST ? null
+  : createGoogleAds({ test: Q.get('adtest') === '1', onChange: () => refreshOffers(), mute: (on) => A.setMuted(on || data.muted) });
+// an ad came ready or went: the screen showing offers shows them again
+let lastDouble = 0;
+function refreshOffers() {
+  if (mode === 'title') labels();
+  else if (mode === 'shop') openShop();
+  else if (mode === 'brief' && job) $('brief-ad').hidden = !(createGame({ mode: 'proyekto', contract: job }).toolsOn && adOk('tool'));
+  else if (mode === 'results' && lastDouble) offerDouble(lastDouble);
+}
 function testAd() {
   return new Promise((resolve) => {
     let t = 5, done = false;
@@ -1159,22 +1169,23 @@ function testAd() {
     $('ad-claim').onclick = () => end(true); $('ad-close').onclick = () => end(false);
   });
 }
-const adOk = (kind) => !!AD_PROVIDER && !AUTOPLAY && canOffer(kind, { ads: data.ads, games: data.stats.games || 0, on: data.opt.offers }, Date.now());
+const adOk = (kind) => !!AD_PROVIDER && AD_PROVIDER.ready() && !AUTOPLAY && canOffer(kind, { ads: data.ads, games: Q.get('adtest') === '1' ? 99 : data.stats.games || 0, on: data.opt.offers }, Date.now()); // ?adtest=1: offers from the first game, to check the ads
 const adBtn = (id, label) => `<button type="button" class="adbtn" id="${id}">${icon('play', 16)} ${label}<small>patalastas</small></button>`;
 async function watchAd(kind) {
   if (!adOk(kind)) return false;
-  const ok = await AD_PROVIDER(kind);
+  const ok = await AD_PROVIDER.show(kind);
   if (!ok) { toast('Walang gantimpala: hindi tinapos ang patalastas.', 2200); return false; }
   data.ads = spend(kind, data.ads); persist();
   return true;
 }
 // the results screen: the game's barya again
 function offerDouble(coins) {
+  lastDouble = coins;
   const el = $('ad-double');
   el.hidden = !(coins > 0 && adOk('double'));
   el.disabled = false;
   el.innerHTML = `${icon('play', 16)} Doblehin: +${coins} barya<small>patalastas</small>`;
-  el.onclick = async () => { el.disabled = true; if (await watchAd('double')) { data.coins += coins; persist(); el.hidden = true; A.event({ type: 'ceremony' }); toast(`+${coins} barya! Doble ang kita.`, 2200); } el.disabled = false; };
+  el.onclick = async () => { el.disabled = true; if (await watchAd('double')) { data.coins += coins; lastDouble = 0; persist(); el.hidden = true; A.event({ type: 'ceremony' }); toast(`+${coins} barya! Doble ang kita.`, 2200); } el.disabled = false; };
 }
 // the Tindahan's offers: free barya and Overtime
 function shopOffers() {
