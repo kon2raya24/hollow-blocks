@@ -116,6 +116,17 @@ Make an **account** (a name and a password, no email) and your progress is saved
 - **Katamtaman:** the classic.
 - **Mahirap:** starts on the sixth floor.
 
+## Reward ads (ready, not switched on)
+
+Ads are only ever a button the player picks. There are no banners and nothing interrupts a game. Every button is marked *patalastas*, there's a daily cap on each kind (12 in all), nothing is offered before the third game, and Settings has a switch to turn them off. The rewards never reach a ranked game:
+
+- **Results:** double the barya from that game.
+- **Tindahan:** +50 barya (3 a day), *Overtime* (2× XP for the next 3 games, once a day), and wearing a locked item for 24 hours.
+- **Proyekto:** start a contract with a random tool. Contracts aren't ranked, and the tool is written into the replay.
+- **Title:** save a streak of two days or more on the day it breaks.
+
+No ad network is connected yet, so none of this shows. Open the game with `?ads=test` to try it with a stand-in ad: a five-second countdown, with no reward if it's closed early. To connect a network, set `AD_PROVIDER` in `src/main.mjs` to a function that plays a rewarded ad and resolves to whether it was watched, and add the network's domains to the Content Security Policy in `index.html`. The rules are in `src/ads.mjs` (`test/ads.test.mjs`).
+
 ## Safety
 
 Kapatas says it once before your first game: on a real construction site, always wear a hard hat, and children don't belong there.

@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Hollow Blocks">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-QS/jtX6HJEJQvJ39PCxH+m+GGPBjI/5i+S7ZyV9tAso='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https://hollow-blocks.vercel.app https://fonts.googleapis.com https://fonts.gstatic.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-QS/jtX6HJEJQvJ39PCxH+m+GGPBjI/5i+S7ZyV9tAso='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' blob: data: https://hollow-blocks.vercel.app https://fonts.googleapis.com https://fonts.gstatic.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Barlow+Condensed:ital,wght@0,700;0,800;1,800;1,900&display=swap" rel="stylesheet">
@@ -315,6 +315,15 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
 .rk-list b { font: italic 900 18px/1 "Barlow Condensed", sans-serif; color: var(--gold); }
 .rk-list button { min-height: 32px; padding: 2px 8px; }
 #rk-me b { color: var(--gold); } #results-rank button { font-size: 15px; padding: 6px 12px; }
+/* rewarded ads: opt-in buttons, marked as ads */
+.adbtn { display: inline-flex; align-items: center; gap: 6px; border-style: dashed; border-color: #8fd18a; background: linear-gradient(180deg, rgba(40,70,44,.92), rgba(18,34,22,.92)); }
+.adbtn small { font: 600 10px/1 "Baloo 2", sans-serif; letter-spacing: .04em; text-transform: lowercase; color: #b8e6b2; opacity: .85; margin-left: 4px; }
+#ad-streak { margin: 4px auto 0; font-size: 15px; padding: 6px 14px; }
+#shop-offers { margin: 4px 0 8px; } #shop-offers .adbtn { font-size: 14px; padding: 6px 12px; min-height: 36px; }
+.trialnote { display: block; color: #b8e6b2; font-size: 12px; }
+.adlayer { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(8,5,10,.88); }
+.adcard { width: min(420px, 90vw); display: grid; gap: 10px; text-align: center; }
+.adcard small { letter-spacing: .2em; color: #b8e6b2; } .adleft { font: italic 900 72px/1 "Barlow Condensed", sans-serif; color: var(--gold); }
 </style>
 </head>
 <body>
@@ -358,6 +367,7 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
         <button type="button" class="tile" id="rank-btn"><i data-icon="ranking"></i><span>Ranking</span></button>
         <button type="button" class="tile" id="acct-btn"><i data-icon="tao"></i><span id="acct-label">Account</span></button>
       </div>
+      <button type="button" class="adbtn" id="ad-streak" hidden></button>
       <div id="weekly"></div>
       <button type="button" class="sound corner-sound" aria-label="Sound"></button>
     </section>
@@ -377,6 +387,7 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
     <section class="screen" id="shop" hidden>
       <div class="card shopcard">
         <div class="shophead"><h2>Tindahan</h2><span class="hchip" id="shop-wallet"></span></div>
+        <div class="row" id="shop-offers" hidden></div>
         <div class="modes" id="shop-tabs"></div>
         <div class="sgrid" id="shop-body"></div>
         <div class="sdetail" id="shop-detail"></div>
@@ -427,6 +438,7 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
         <button type="button" id="next-job" hidden>Susunod na Kontrata</button>
         <button type="button" id="share" hidden>Ibahagi · Share</button>
         <button type="button" id="watch" hidden>Panoorin · Replay</button>
+        <button type="button" class="adbtn" id="ad-double" hidden></button>
         <button type="button" class="menu">Menu</button>
       </div>
     </section>
@@ -448,8 +460,17 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
         <p><b>Kapatas:</b> "<span id="brief-text"></span>"</p>
         <p><i data-icon="target"></i> <span id="brief-goal"></span></p><p><i data-icon="warn"></i> <span id="brief-twist"></span></p><p><i data-icon="star"></i> <span id="brief-par"></span></p>
         <p class="stars" id="brief-stars"></p></div>
-      <div class="row"><button type="button" class="primary" id="brief-go">Simulan · Start</button><button type="button" id="brief-lesson" hidden></button><button type="button" id="brief-back">Bumalik · Back</button></div>
+      <div class="row"><button type="button" class="primary" id="brief-go">Simulan · Start</button><button type="button" class="adbtn" id="brief-ad" hidden><i data-icon="play"></i> Simulan na may gamit<small>patalastas</small></button><button type="button" id="brief-lesson" hidden></button><button type="button" id="brief-back">Bumalik · Back</button></div>
     </section>
+
+    <div class="adlayer" id="ad" hidden role="dialog" aria-modal="true" aria-label="Patalastas">
+      <div class="card adcard">
+        <small>PATALASTAS · TEST AD</small>
+        <b class="adleft" id="ad-left"></b>
+        <p class="muted">Dito lalabas ang totoong patalastas kapag naikonekta na ang ad network. Tapusin para sa gantimpala.</p>
+        <div class="row"><button type="button" class="primary" id="ad-claim" hidden>Kunin ang gantimpala</button><button type="button" id="ad-close">Isara · Close</button></div>
+      </div>
+    </div>
 
     <section class="screen" id="account" hidden>
       <h2>Account</h2>

@@ -126,7 +126,7 @@ export function tSpin(board, p, lastRot, lastKick) {
 }
 
 // ---------- a game ----------
-export function createGame({ seed = 1, mode = 'bahay', difficulty = 'katamtaman', tools = null, contract = null, opts = null, board = null, sequence = null, toolset = null } = {}) {
+export function createGame({ seed = 1, mode = 'bahay', difficulty = 'katamtaman', tools = null, contract = null, opts = null, board = null, sequence = null, toolset = null, bonusTool = null } = {}) {
   const diff = DIFFICULTY[difficulty] || DIFFICULTY.katamtaman;
   const o = opts || {};
   const rules = {
@@ -160,6 +160,7 @@ export function createGame({ seed = 1, mode = 'bahay', difficulty = 'katamtaman'
   g.start = start; g.level = start;
   if (toolsOn) g.toolIn = TOOL_EVERY[0] + Math.floor(rand(g.trs) * (TOOL_EVERY[1] - TOOL_EVERY[0] + 1));
   if (c0.startTools) g.tools = c0.startTools.slice(0, TOOL_MAX);
+  if (bonusTool && toolsOn && g.tools.length < TOOL_MAX) g.tools.push(bonusTool); // a rewarded ad's tool (unranked contracts only)
   // a messy foundation: rows of rubble at the bottom, one gap each
   if (board) g.board = board.slice();
   if (c.garbage) for (let r = 0; r < c.garbage; r++) { const y = ROWS - 1 - r, gap = Math.floor(rand(g.grs) * COLS); for (let x = 0; x < COLS; x++) if (x !== gap) g.board[y * COLS + x] = MUD; }

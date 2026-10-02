@@ -15,6 +15,7 @@ import { createAudio } from './audio.mjs';
 import { CONTRACTS, BARANGAYS, CHAPTERS, chapterOpen, contractById, starsFor, unlocked, brgyStars, describe } from './contracts.mjs';
 import { icon, portrait } from './icons.mjs';
 import { createOnline, RANKED, byDiff } from './online.mjs';
+import { canOffer, spend, left, boosted, useBoost, onTrial, startTrial, brokeStreak, canRescue, rescue, OFFERS } from './ads.mjs';
 import { xpFor, rankOf, RANKS, STYLES, styleOpen, MEDALS, newMedals, addStats, dateKey, dailySeed, shareText, toolsetFor, TOOL_RANK, weeklyEvent, countdown, WEEKLY_MEDALS, EVENTS, touchStreak } from './progress.mjs';
 
 const Q = new URLSearchParams(location.search);
@@ -95,8 +96,11 @@ const data = {
   // v8: barya, the locker, the login streak
   coins: Number.isFinite(saved.coins) ? saved.coins : 0, owned: Array.isArray(saved.owned) ? saved.owned.filter((id) => itemById(id)) : [],
   equip: { ...DEFAULT_EQUIP, ...(saved.equip && typeof saved.equip === 'object' ? saved.equip : {}) }, streak: saved.streak && typeof saved.streak === 'object' ? saved.streak : null,
+  // v11: rewarded ads (ads.mjs): today's counts, Overtime, items on trial, a streak that can be saved
+  ads: saved.ads && typeof saved.ads === 'object' ? saved.ads : null, boost: saved.boost && typeof saved.boost === 'object' ? saved.boost : { games: 0 },
+  trials: saved.trials && typeof saved.trials === 'object' ? saved.trials : {}, lostStreak: saved.lostStreak && typeof saved.lostStreak === 'object' ? saved.lostStreak : null,
 };
-data.opt = { haptics: true, voice: true, voiceVol: 0.8, ...data.opt };
+data.opt = { haptics: true, voice: true, voiceVol: 0.8, offers: true, ...data.opt };
 if (touch && data.mode === 'tapatan') data.mode = 'bahay'; // two players need a keyboard
 if (!MODES[data.mode]) data.mode = 'bahay';
 for (const el of document.querySelectorAll('[data-icon]')) el.innerHTML = icon(el.dataset.icon, el.closest('.pad') ? 30 : 20);
@@ -124,6 +128,7 @@ let mode = 'title', game = null, job = null; // job: the contract being played
 let match = null, vsPick = null, lesson = null, coach = null, rec = null, ghost = null, viewer = null, capture = null;
 let lessonEnd = 0; // ticks left before a lesson's verdict shows
 let tap = null; // Tapatan's series: { wins: [p1, p2], round }
+let bonusTool = null; // a contract's starting tool, from a rewarded ad; for the next start only
 const tapIn = [createInput(), createInput()];
 let tapRoutes = new Map();
 const tapKeys = () => { tapRoutes = routes([data.tap.src[0] === 'keys' ? data.keys1 : null, data.tap.src[1] === 'keys' ? data.keys2 : null]); };
@@ -181,8 +186,10 @@ function start() {
     const diff = daily || data.mode === 'proyekto' || data.mode === 'lingguhan' ? 'katamtaman' : data.difficulty;
     const wk = data.mode === 'lingguhan' ? weeklyEvent() : null;
     const gs = wk ? dailySeed(wk.week) : sd, ts = toolsetFor(data.xp);
-    game = createGame({ seed: gs, mode: data.mode, difficulty: diff, contract: data.mode === 'proyekto' ? job : wk ? wk.contract : null, opts, toolset: ts });
-    rec = createRecorder({ v: 1, mode: data.mode, diff, seed: gs, job: data.mode === 'proyekto' && job ? job.id : undefined, ev: wk ? wk.id : undefined, ts: ts.length > TOOLS.length ? ts : undefined, opts });
+    const bonus = data.mode === 'proyekto' ? bonusTool : null;
+    bonusTool = null;
+    game = createGame({ seed: gs, mode: data.mode, difficulty: diff, contract: data.mode === 'proyekto' ? job : wk ? wk.contract : null, opts, toolset: ts, bonusTool: bonus });
+    rec = createRecorder({ v: 1, mode: data.mode, diff, seed: gs, job: data.mode === 'proyekto' && job ? job.id : undefined, ev: wk ? wk.id : undefined, ts: ts.length > TOOLS.length ? ts : undefined, bonus: bonus || undefined, opts });
     if (data.rules.ghost && (data.mode === 'deadline' || data.mode === 'karera')) loadGhost(game, bestKey());
   }
   if (view) view.setVersus(!!match, match ? match.prof : null);
@@ -224,7 +231,8 @@ function finish(done) {
       data.weekly = prevW; isBest = g.score >= prevW.best && g.score > 0;
     }
     if (g.mode === 'daily') { const dk = dateKey(); const prevD = data.daily[dk]; if (!prevD || g.score > prevD.score) data.daily = { [dk]: { score: g.score, lines: g.lines, bayanihan: g.stats.bayanihan } }; }
-    const before = rankOf(data.xp), gain = xpFor(r), coins = coinsFor(r);
+    const ot = (data.boost?.games || 0) > 0, before = rankOf(data.xp), gain = boosted(xpFor(r), data.boost), coins = coinsFor(r);
+    data.boost = useBoost(data.boost);
     data.xp += gain; data.stats = addStats(data.stats, r); data.coins += coins;
     const after = rankOf(data.xp);
     const fresh = newMedals(r, { medals: data.medals, stats: data.stats, xp: data.xp, brgyStars: [0, 1, 2].map((b) => brgyStars(data.stars, b)) });
@@ -236,7 +244,8 @@ function finish(done) {
     $('watch').onclick = () => { if (replays.last) watch(replays.last.code); };
     $('results-stars').hidden = g.mode !== 'proyekto';
     $('results-stars').innerHTML = [1, 2, 3].map((k) => `<span class="${k <= stars ? '' : 'off'}">★</span>`).join('');
-    $('results-xp').innerHTML = `+${gain} XP · +${coins} barya · ${after.name}${after.next ? ` · ${after.need} pa para sa ${after.next}` : ''}<i style="--p:${Math.round(after.progress * 100)}%"></i>`;
+    offerDouble(coins);
+    $('results-xp').innerHTML = `+${gain} XP${ot ? ' (2× Overtime)' : ''} · +${coins} barya · ${after.name}${after.next ? ` · ${after.need} pa para sa ${after.next}` : ''}<i style="--p:${Math.round(after.progress * 100)}%"></i>`;
     $('results-medals').innerHTML = fresh.map((id) => { const m = MEDALS.find((x) => x.id === id); return `<div class="medal got fresh"><b>★</b>${m.name}</div>`; }).join('');
     const nextJob = g.mode === 'proyekto' && stars > 0 ? CONTRACTS[CONTRACTS.findIndex((c) => c.id === g.contract.id) + 1] : null;
     $('next-job').hidden = !(nextJob && unlocked(data.stars, nextJob.id)); $('next-job').textContent = 'Susunod na Kontrata';
@@ -274,7 +283,8 @@ function finishVersus(winner) {
     const r = { mode: 'versus', done: win, ticks: g.elapsed, score: g.score, lines: g.lines, level: g.level, pieces: g.pieces, bayanihan: g.stats.bayanihan, tspins: g.stats.tspins, tspinTriple: g.stats.tspinTriple || 0, maxCombo: g.stats.maxCombo, perfect: g.stats.perfect, tools: 0 };
     const ladderI = LADDER.findIndex((x) => x.id === m.rival);
     if (win) { data.vs.wins++; if (ladderI >= 0 && !data.vs.beaten.includes(m.rival)) data.vs.beaten.push(m.rival); }
-    const before = rankOf(data.xp), gain = xpFor(r) + (win ? 150 + Math.max(0, ladderI) * 50 : 0), coins = coinsFor({ ...r, win });
+    const ot = (data.boost?.games || 0) > 0, before = rankOf(data.xp), gain = boosted(xpFor(r) + (win ? 150 + Math.max(0, ladderI) * 50 : 0), data.boost), coins = coinsFor({ ...r, win });
+    data.boost = useBoost(data.boost);
     data.xp += gain; data.stats = addStats(data.stats, r); data.coins += coins;
     const after = rankOf(data.xp);
     const fresh = newMedals(r, { medals: data.medals, stats: data.stats, xp: data.xp, brgyStars: [0, 1, 2].map((b) => brgyStars(data.stars, b)) });
@@ -290,7 +300,8 @@ function finishVersus(winner) {
     $('results-best').className = win ? 'new' : 'muted';
     const stat = (label, v) => `<div><span>${label}</span><b>${v}</b></div>`;
     $('results-stats').innerHTML = stat('Ipinadala', `${m.sent[0]} putik`) + stat('Natanggap', `${m.got[0]} putik`) + stat('Hanay', g.lines) + stat('Piraso/seg', (g.pieces / secs).toFixed(2)) + stat('T-spin', g.stats.tspins) + stat('Oras', clock(m.tick));
-    $('results-xp').innerHTML = `+${gain} XP · +${coins} barya · ${after.name}${after.next ? ` · ${after.need} pa para sa ${after.next}` : ''}<i style="--p:${Math.round(after.progress * 100)}%"></i>`;
+    offerDouble(coins);
+    $('results-xp').innerHTML = `+${gain} XP${ot ? ' (2× Overtime)' : ''} · +${coins} barya · ${after.name}${after.next ? ` · ${after.need} pa para sa ${after.next}` : ''}<i style="--p:${Math.round(after.progress * 100)}%"></i>`;
     $('results-medals').innerHTML = fresh.map((id) => { const md = MEDALS.find((x) => x.id === id); return `<div class="medal got fresh"><b>★</b>${md.name}</div>`; }).join('');
     const nxt = win && ladderI >= 0 ? LADDER[ladderI + 1] : null;
     $('next-job').hidden = !nxt; $('next-job').textContent = nxt ? `Susunod: ${nxt.name}` : '';
@@ -319,7 +330,7 @@ function tapKo(winner) {
     $('results-best').textContent = 'Tapatan · pinakamahusay sa tatlo'; $('results-best').className = 'new';
     const stat = (label, v) => `<div><span>${label}</span><b>${v}</b></div>`;
     $('results-stats').innerHTML = stat('P1 padala', `${m.sent[0]} putik`) + stat('P2 padala', `${m.sent[1]} putik`) + stat('Ronda', tap.round) + stat('P1 hanay', m.a.lines) + stat('P2 hanay', m.b.lines) + stat('Oras', clock(m.tick));
-    $('results-xp').innerHTML = ''; $('results-medals').innerHTML = ''; $('results-stars').hidden = true; $('share').hidden = true; $('watch').hidden = true; $('next-job').hidden = true; $('results-rank').hidden = true;
+    $('results-xp').innerHTML = ''; $('results-medals').innerHTML = ''; $('results-stars').hidden = true; $('share').hidden = true; $('watch').hidden = true; $('next-job').hidden = true; $('results-rank').hidden = true; $('ad-double').hidden = true;
     $('results-tip').textContent = `"Ganyan ang tapatan! Kamayan na kayo." — Kapatas`;
     if (view) view.celebrate(); A.event({ type: 'ceremony' }); buzz([40, 30, 80]);
     tap = null;
@@ -530,6 +541,7 @@ function clearInput() { held.clear(); pressed = []; }
 const playing = () => mode === 'play' && game;
 document.addEventListener('keydown', (e) => {
   if (e.target.closest && e.target.closest('input')) return; // typing a name or password
+  if (!$('ad').hidden) return; // an ad is showing
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (capture && capture.kind === 'key') { e.preventDefault(); captured(k); return; }
   if (match && match.local && (mode === 'play' || mode === 'pause')) {
@@ -696,6 +708,10 @@ function labels() {
   const st = data.streak || {};
   $('streak').innerHTML = st.count ? `${icon('apoy', 22)} <b>${st.count}</b> araw` : '';
   $('streak').classList.toggle('hot', (st.count || 0) >= 3);
+  const lost = canRescue(data.lostStreak) && adOk('streak') ? data.lostStreak : null;
+  $('ad-streak').hidden = !lost;
+  if (lost) $('ad-streak').innerHTML = `${icon('apoy', 18)} Iligtas ang ${lost.count}-araw na streak<small>patalastas</small>`;
+  if ((data.boost?.games || 0) > 0) $('title-rank').innerHTML += ` · <b>2×</b> XP ${data.boost.games}`;
   weeklyBanner();
   $('diff-note').textContent = { madali: 'Madali: mas mabagal ang bagsak at mas matagal bago dumikit.', katamtaman: 'Katamtaman: ang klasiko.', mahirap: 'Mahirap: magsisimula sa ika-6 na palapag.' }[data.difficulty] + ' (Bahay, Deadline, Bagyo, Karera)';
 }
@@ -731,6 +747,7 @@ function openSettings(from) {
     <div class="grp"><h3>Laro · Game</h3>
     <p class="muted">Anino ng piraso · Ghost piece</p>${seg('ghost', [[true, 'Oo · On'], [false, 'Wala · Off']])}
     <p class="muted">Eksena sa Bayanihan at bagong palapag · Cutscenes</p>${seg('cine', [[true, 'Buo · Full'], [false, 'Wala · Off']])}
+    ${AD_PROVIDER ? `<p class="muted">Mga alok na may patalastas · Reward ads</p>${seg('offers', [[true, 'Oo · On'], [false, 'Wala · Off']])}` : ''}
     </div><div class="grp"><h3>Camera</h3>
     <p class="muted">Anggulo · Angle</p>${seg('angle', [[true, 'Pahilig · Angled'], [false, 'Tuwid · Straight']])}
     <p class="muted">Yanig ng camera · Camera shake</p>${seg('calm', [[false, 'Buo · Full'], [true, 'Kalmado · Reduced']])}
@@ -790,10 +807,18 @@ function openBrief(c) {
   $('brief-stars').innerHTML = [1, 2, 3].map((k) => `<span class="${k <= st ? '' : 'off'}">★</span>`).join('');
   const L = lessonFor(c.id);
   $('brief-lesson').hidden = !L;
+  $('brief-ad').hidden = !(createGame({ mode: 'proyekto', contract: c }).toolsOn && adOk('tool'));
   if (L) { $('brief-lesson').innerHTML = `${icon('blueprint', 20)} Aralin: ${L.name}${data.lessons.includes(L.id) ? ` ${icon('check', 18)}` : ''}`; $('brief-lesson').onclick = () => openLesson(L); }
   show('brief');
 }
 $('brief-go').onclick = start;
+$('brief-ad').onclick = async () => {
+  if (!(await watchAd('tool'))) return;
+  const ts = toolsetFor(data.xp);
+  bonusTool = ts[Math.floor(Math.random() * ts.length)];
+  start();
+  toast(`May dala kang ${bonusTool}! Pindutin ang E (o ang button) para gamitin.`, 3000);
+};
 $('brief-back').onclick = openMap;
 // ---------- Laban: quick matches and the Liga ng Barangay ----------
 function openVs() {
@@ -976,19 +1001,29 @@ function inspHud(dt) {
 // ---------- Tindahan: the shop and the locker, previewed live on the site behind ----------
 let shopTab = 'skin', shopPrev = null;
 const profile = () => ({ coins: data.coins, tokens: data.tokens, owned: data.owned, equip: data.equip, xp: data.xp, medals: data.medals });
-const looks = (over = null) => { const e = { ...DEFAULT_EQUIP, ...data.equip }; if (over) e[over.kind] = over.id; return e; };
+const looks = (over = null) => {
+  const e = { ...DEFAULT_EQUIP, ...data.equip }, p = profile();
+  for (const k of Object.keys(DEFAULT_EQUIP)) { const it = itemById(e[k]); if (!it || !(isOwned(it, p) || onTrial(data.trials, it.id))) e[k] = DEFAULT_EQUIP[k]; } // a trial over: back to the default
+  if (over) e[over.kind] = over.id;
+  return e;
+};
 function wearLooks(over = null) { const e = looks(over); if (view) { view.setSkin(e.skin); view.setOutfit(e.outfit); view.setTheme(e.theme); } }
 const priceText = (it) => (it.price ? [it.price.coins ? `${icon('barya', 16)} ${it.price.coins}` : '', it.price.tokens ? `${icon('token', 16)} ${it.price.tokens}` : ''].join(' ') : it.unlock ? `${icon('lock', 14)} ${it.unlock.medal ? MEDALS.find((m) => m.id === it.unlock.medal)?.name || 'Medalya' : RANKS[it.unlock.rank].name}` : 'Libre');
 function openShop(tab = shopTab) {
   mode = 'shop'; shopTab = tab;
   const p = profile(), e = looks(), prev = shopPrev ? itemById(shopPrev) : itemById(e[tab]);
   $('shop-wallet').innerHTML = `${icon('barya', 20)} <b>${data.coins.toLocaleString('en-US')}</b> ${icon('token', 20)} <b>${data.tokens}</b>`;
+  shopOffers();
   $('shop-tabs').innerHTML = Object.entries(KINDS).map(([k, n]) => `<button type="button" data-tab="${k}" aria-pressed="${k === tab}">${n}</button>`).join('');
   $('shop-body').innerHTML = ITEMS.filter((it) => it.kind === tab).map((it) => { const own = isOwned(it, p), on = e[it.kind] === it.id; return `<button type="button" class="sitem ${prev && prev.id === it.id ? 'prev' : ''} ${own ? '' : 'locked'}" data-item="${it.id}" aria-pressed="${on}"><span class="swatch">${it.swatch.map((c) => `<i style="background:${c}"></i>`).join('')}</span><b>${it.name}</b><em>${on ? `${icon('check', 14)} Suot` : own ? 'Iyo na' : priceText(it)}</em></button>`; }).join('');
   if (prev) {
     const own = isOwned(prev, p), on = e[prev.kind] === prev.id, can = canBuy(prev, p);
     const btn = on ? `<button type="button" disabled>${icon('check', 16)} Suot na</button>` : own ? `<button type="button" class="primary" id="shop-equip">Isuot · Equip</button>` : prev.price ? `<button type="button" class="primary" id="shop-buy" ${can ? '' : 'disabled'}>Bilhin ${priceText(prev)}</button>` : `<button type="button" disabled>${priceText(prev)}</button>`;
-    $('shop-detail').innerHTML = `<b>${prev.name}</b><div class="row">${btn}</div><p>${prev.desc}${!own && prev.price && !can ? ' <i class="muted">Kulang pa ang ipon.</i>' : ''}${!own && prev.unlock ? ` <i class="muted">Bukas kapag nakuha ang ${prev.unlock.medal ? 'medalyang ' + (MEDALS.find((m) => m.id === prev.unlock.medal)?.name || '') : 'ranggong ' + RANKS[prev.unlock.rank].name}.</i>` : ''}</p>`;
+    const trialing = !own && onTrial(data.trials, prev.id);
+    const tbtn = trialing ? (on ? '' : `<button type="button" class="primary" id="shop-trialwear">Isuot · Trial</button>`) : !own && adOk('trial') ? adBtn('shop-trial', 'Subukan nang 24 oras') : '';
+    $('shop-detail').innerHTML = `<b>${prev.name}</b>${trialing ? `<small class="trialnote">Trial · ${countdown(data.trials[prev.id] - Date.now())} pa</small>` : ''}<div class="row">${btn}${tbtn}</div><p>${prev.desc}${!own && prev.price && !can ? ' <i class="muted">Kulang pa ang ipon.</i>' : ''}${!own && prev.unlock ? ` <i class="muted">Bukas kapag nakuha ang ${prev.unlock.medal ? 'medalyang ' + (MEDALS.find((m) => m.id === prev.unlock.medal)?.name || '') : 'ranggong ' + RANKS[prev.unlock.rank].name}.</i>` : ''}</p>`;
+    if ($('shop-trial')) $('shop-trial').onclick = async () => { if (await watchAd('trial')) { data.trials = startTrial(data.trials, prev.id); data.equip = { ...data.equip, [prev.kind]: prev.id }; persist(); shopPrev = null; wearLooks(); toast(`Suot mo ang ${prev.name} nang 24 oras!`, 2400); openShop(tab); } };
+    if ($('shop-trialwear')) $('shop-trialwear').onclick = () => { data.equip = { ...data.equip, [prev.kind]: prev.id }; persist(); shopPrev = null; wearLooks(); openShop(tab); };
     if ($('shop-equip')) $('shop-equip').onclick = () => { const r = equip(prev, profile()); if (r.ok) { data.equip = r.p.equip; persist(); shopPrev = null; wearLooks(); A.event({ type: 'levelUp' }); openShop(tab); } };
     if ($('shop-buy')) $('shop-buy').onclick = () => { const r = buy(prev, profile()); if (r.ok) { Object.assign(data, { coins: r.p.coins, tokens: r.p.tokens, owned: r.p.owned }); const q = equip(prev, profile()); if (q.ok) data.equip = q.p.equip; persist(); shopPrev = null; wearLooks(); A.event({ type: 'ceremony' }); buzz([20, 20, 40]); toast(`Nabili: ${prev.name}!`, 1800); openShop(tab); } };
   } else $('shop-detail').innerHTML = '';
@@ -1052,9 +1087,61 @@ $('house-back').onclick = openBook;
 function streakDay() {
   const r = touchStreak(data.streak);
   if (!r.bonus) return;
+  const lost = brokeStreak(data.streak, r.st);
+  if (lost) data.lostStreak = lost;
   data.streak = r.st; data.xp += r.bonus.xp; data.coins += r.bonus.coins; persist();
   setTimeout(() => toast(`${r.graced ? 'Nailigtas ng palugit ang streak mo! ' : ''}Araw ${r.st.count} ng streak: +${r.bonus.xp} XP, +${r.bonus.coins} barya`, 3200), 1200);
 }
+
+// ---------- rewarded ads (ads.mjs) ----------
+// A provider plays an ad and says whether it was watched to the end. No ad network is connected yet,
+// so there are no offers unless the page is opened with ?ads=test, which plays a stand-in. To connect
+// one, set AD_PROVIDER to a function (kind) => Promise<boolean> around the network's rewarded call,
+// and add its domains to the Content Security Policy in index.html.
+const AD_PROVIDER = Q.get('ads') === 'test' ? testAd : null;
+function testAd() {
+  return new Promise((resolve) => {
+    let t = 5, done = false;
+    const tick = () => { $('ad-left').textContent = t > 0 ? `${t}` : '✓'; $('ad-claim').hidden = t > 0; };
+    $('ad').hidden = false; A.setMuted(true); tick();
+    const iv = setInterval(() => { t--; tick(); if (t <= 0) clearInterval(iv); }, 1000);
+    const end = (ok) => { if (done) return; done = true; clearInterval(iv); $('ad').hidden = true; A.setMuted(data.muted); resolve(ok); };
+    $('ad-claim').onclick = () => end(true); $('ad-close').onclick = () => end(false);
+  });
+}
+const adOk = (kind) => !!AD_PROVIDER && !AUTOPLAY && canOffer(kind, { ads: data.ads, games: data.stats.games || 0, on: data.opt.offers }, Date.now());
+const adBtn = (id, label) => `<button type="button" class="adbtn" id="${id}">${icon('play', 16)} ${label}<small>patalastas</small></button>`;
+async function watchAd(kind) {
+  if (!adOk(kind)) return false;
+  const ok = await AD_PROVIDER(kind);
+  if (!ok) { toast('Walang gantimpala: hindi tinapos ang patalastas.', 2200); return false; }
+  data.ads = spend(kind, data.ads); persist();
+  return true;
+}
+// the results screen: the game's barya again
+function offerDouble(coins) {
+  const el = $('ad-double');
+  el.hidden = !(coins > 0 && adOk('double'));
+  el.disabled = false;
+  el.innerHTML = `${icon('play', 16)} Doblehin: +${coins} barya<small>patalastas</small>`;
+  el.onclick = async () => { el.disabled = true; if (await watchAd('double')) { data.coins += coins; persist(); el.hidden = true; A.event({ type: 'ceremony' }); toast(`+${coins} barya! Doble ang kita.`, 2200); } el.disabled = false; };
+}
+// the Tindahan's offers: free barya and Overtime
+function shopOffers() {
+  const bits = [];
+  if (adOk('barya')) bits.push(adBtn('ad-barya', `+${OFFERS.barya.coins} barya (${left('barya', data.ads)} pa ngayon)`));
+  if ((data.boost?.games || 0) > 0) bits.push(`<span class="hchip">Overtime: <b>2×</b> XP · ${data.boost.games} laro pa</span>`);
+  else if (adOk('overtime')) bits.push(adBtn('ad-overtime', `Overtime: 2× XP sa ${OFFERS.overtime.games} laro`));
+  $('shop-offers').innerHTML = bits.join('');
+  $('shop-offers').hidden = !bits.length;
+  if ($('ad-barya')) $('ad-barya').onclick = async () => { if (await watchAd('barya')) { data.coins += OFFERS.barya.coins; persist(); A.event({ type: 'ceremony' }); toast(`+${OFFERS.barya.coins} barya!`, 1800); openShop(); } };
+  if ($('ad-overtime')) $('ad-overtime').onclick = async () => { if (await watchAd('overtime')) { data.boost = { games: OFFERS.overtime.games }; persist(); labels(); toast(`Overtime! Doble ang XP sa susunod na ${OFFERS.overtime.games} laro.`, 2400); openShop(); } };
+}
+$('ad-streak').onclick = async () => {
+  if (!canRescue(data.lostStreak) || !(await watchAd('streak'))) return;
+  data.streak = rescue(data.streak, data.lostStreak); data.lostStreak = null; persist(); labels();
+  A.event({ type: 'ceremony' }); toast(`Naligtas! Araw ${data.streak.count} ng streak mo.`, 2400);
+};
 
 // ---------- online: the account, the cloud save and Ranking (online.mjs, api/_hb.mjs) ----------
 // The save with more XP wins (XP only grows): a newer one from another device or from before the browser
@@ -1406,7 +1493,7 @@ async function boot() {
     const fastTap = (n) => { for (let k = 0; k < n; k++) { if (!match || mode !== 'play' || match.phase !== 'play') break; onMatch(matchStep(match, bot(match.a, { pace: 4 }), 1 / 60, null, bot(match.b, { pace: 6, style: 'tetris' }))); if (view && k % 20 === 19) view.frame(game, 1 / 3, { mode: 'play', reduced: reduced(), cine: false, ghost: true, rival: match.b, p2: true, next: data.rules.next }); } return match && match.tick; };
     // the same for a match: the bot plays your well too
     const fastVs = (n) => { for (let k = 0; k < n; k++) { if (!match || mode !== 'play' || match.phase !== 'play') break; const out = matchStep(match, bot(match.a, { pace: 4 }), 1 / 60, (inp) => { if (rec) record(rec, inp); }); onMatch(out); if (view && k % 20 === 19) view.frame(game, 1 / 3, { mode: 'play', reduced: reduced(), cine: false, ghost: true, rival: match.b, next: data.rules.next }); } return match && match.tick; };
-    window.__hb = { online, openAccount, openRanking, openModes, openShop, openBook, openHouse, get houses() { return houses; }, recordHouse, labels, V, wearLooks, job: (id) => openBrief(contractById(id)), fastTap, openTapatan, get tap() { return tap; }, tapIn, openMap, weeklyBanner, inspSays, fast, fastVs, A, get game() { return game; }, get match() { return match; }, get mode() { return mode; }, get demo() { return demo; }, get viewer() { return viewer; }, get coach() { return coach; }, get ghost() { return ghost; }, replays, start, get view() { return view; }, pause, resume, openSettings: () => openSettings(mode === 'pause' ? 'pause' : 'title'), openKeys, openVs, openRival, openLessons, openLesson: (id) => openLesson(lessonById(id)), openReplays, watch, encodeLast: async () => rec && encode(rec), keepReplay: () => keepReplay(game, true), data, showFinesse, setRec: (r) => { rec = r; } };
+    window.__hb = { online, openAccount, offerDouble, shopOffers, openRanking, openModes, openShop, openBook, openHouse, get houses() { return houses; }, recordHouse, labels, V, wearLooks, job: (id) => openBrief(contractById(id)), fastTap, openTapatan, get tap() { return tap; }, tapIn, openMap, weeklyBanner, inspSays, fast, fastVs, A, get game() { return game; }, get match() { return match; }, get mode() { return mode; }, get demo() { return demo; }, get viewer() { return viewer; }, get coach() { return coach; }, get ghost() { return ghost; }, replays, start, get view() { return view; }, pause, resume, openSettings: () => openSettings(mode === 'pause' ? 'pause' : 'title'), openKeys, openVs, openRival, openLessons, openLesson: (id) => openLesson(lessonById(id)), openReplays, watch, encodeLast: async () => rec && encode(rec), keepReplay: () => keepReplay(game, true), data, showFinesse, setRec: (r) => { rec = r; } };
     if (Q.get('rival')) { vsPick = Q.get('rival'); }
     if (Q.get('lesson')) lesson = lessonById(Q.get('lesson'));
     if (Q.get('difficulty')) data.difficulty = Q.get('difficulty');

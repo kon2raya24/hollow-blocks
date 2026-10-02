@@ -44,7 +44,7 @@ export const BOARD = /^(?:(?:bahay|karera|bagyo|deadline)\.(?:madali|katamtaman|
 export const lowWins = (board) => board.startsWith('deadline.');
 // The board a replay's game belongs on, or why it has none.
 export function boardFor(head, now) {
-  if (!head || head.vs || head.job || head.lesson) return { err: 'Walang talaan ang larong ito.' };
+  if (!head || head.vs || head.job || head.lesson || head.bonus) return { err: 'Walang talaan ang larong ito.' };
   if (!DIFFICULTY[head.diff]) return { err: 'Hindi kilalang hirap.' };
   if (['bahay', 'karera', 'bagyo', 'deadline'].includes(head.mode)) return head.ev ? { err: 'Hindi tugma ang laro.' } : { board: `${head.mode}.${head.diff}` };
   if (head.diff !== 'katamtaman' || head.ts) return { err: 'Hindi tugma ang laro.' };

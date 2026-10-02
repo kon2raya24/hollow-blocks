@@ -35,11 +35,12 @@ export function inputs(rec) {
   };
 }
 
-// The game a recording starts from. ts: the rank tools in play; ev: the weekly event's id.
+// The game a recording starts from. ts: the rank tools in play; ev: the weekly event's id; bonus: a
+// tool to start with (a rewarded ad's, in a contract).
 export function gameFor(head) {
   if (head.vs) return createMatch({ seed: head.seed, rival: head.vs, opts: head.opts || null });
   const contract = head.job ? contractById(head.job) : head.ev ? EVENTS.find((e) => e.id === head.ev)?.contract || null : null;
-  return createGame({ seed: head.seed, mode: head.mode, difficulty: head.diff, contract, opts: head.opts || null, toolset: head.ts || null, ...(head.lesson || {}) });
+  return createGame({ seed: head.seed, mode: head.mode, difficulty: head.diff, contract, opts: head.opts || null, toolset: head.ts || null, bonusTool: head.bonus || null, ...(head.lesson || {}) });
 }
 // Advance a replay by one tick: { g (or match), feed, i }.
 export function startPlayback(rec) { return { rec, g: gameFor(rec.head), feed: inputs(rec), i: 0, end: rec.t }; }
