@@ -1192,11 +1192,12 @@ function testAd() {
 const adOk = (kind) => !!AD_PROVIDER && AD_PROVIDER.ready() && !AUTOPLAY && canOffer(kind, { ads: data.ads, games: Q.get('adtest') === '1' ? 99 : data.stats.games || 0, on: data.opt.offers }, Date.now()); // ?adtest=1: offers from the first game, to check the ads
 const adBtn = (id, label) => `<button type="button" class="adbtn" id="${id}">${icon('play', 16)} ${label}<small>patalastas</small></button>`;
 let adShowing = false;
+const APP_NODES = [...document.body.children]; // the page's own, from before any ad code; an ad network's added later stay live
 async function watchAd(kind) {
   if (!adOk(kind) || adShowing) return false;
   // everything but the ad's own layer goes inert (a real network's ad is added later, so it stays live)
   const back = document.activeElement, rest = [];
-  for (let n = $('ad'); n && n.parentElement; n = n.parentElement) for (const sib of n.parentElement.children) if (sib !== n && !sib.inert && sib.tagName !== 'SCRIPT') rest.push(sib);
+  for (let n = $('ad'); n && n.parentElement; n = n.parentElement) for (const sib of n.parentElement.children) if (sib !== n && !sib.inert && sib.tagName !== 'SCRIPT' && (n.parentElement !== document.body || APP_NODES.includes(sib))) rest.push(sib);
   adShowing = true; for (const el of rest) el.inert = true;
   let ok = false;
   try { ok = await AD_PROVIDER.show(kind); } finally { adShowing = false; for (const el of rest) el.inert = false; if (back && back.isConnected) back.focus({ preventScroll: true }); }
