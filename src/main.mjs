@@ -495,20 +495,36 @@ function placeToast() {
   if (el.hidden) return;
   if (!live()) { if (el.classList.contains('side')) { el.classList.remove('side'); el.style.cssText = ''; } return; }
   const w = wellBox(true), roomL = w.left - 24, roomR = innerWidth - w.right - 24;
+  const o = (el.offsetParent || document.body).getBoundingClientRect(); // left/top are in the container's coordinates
   if (Math.max(roomL, roomR) >= 200) {
     const width = Math.min(340, Math.max(roomL, roomR));
-    el.classList.add('side');
+    el.classList.add('side'); el.style.bottom = 'auto'; el.style.transform = 'none';
     el.style.width = `${width}px`;
-    el.style.left = `${roomL >= roomR ? Math.max(12, w.left - 12 - width) : w.right + 12}px`;
-    el.style.top = `${Math.round(w.top + (w.bottom - w.top) * 0.55)}px`;
+    el.style.left = `${(roomL >= roomR ? Math.max(12, w.left - 12 - width) : w.right + 12) - o.left}px`;
+    el.style.top = `${Math.round(w.top + (w.bottom - w.top) * 0.55 - o.top)}px`;
+  } else if (w.top >= el.offsetHeight + 16) { // room above the well (the 2D board's frame)
+    el.classList.add('side'); el.style.bottom = 'auto'; el.style.transform = 'none';
+    el.style.width = `${Math.min(innerWidth - 24, 420)}px`; el.style.left = `${Math.round((innerWidth - Math.min(innerWidth - 24, 420)) / 2 - o.left)}px`;
+    el.style.top = `${Math.round(w.top - el.offsetHeight - 8 - o.top)}px`;
   } else if (view) { el.hidden = true; callout('', el.textContent, Math.max(1.2, (toastEnd - performance.now()) / 1000)); }
 }
 // a clear's words and kita: beside the well and its boards if there's room, else in the top chip
 function scorePop(word, more, tone = '') {
   if (!view) return; // the 2D board draws its own
   const rest = more.filter(Boolean), w = wellBox(true), room = innerWidth - w.right - 24;
-  if (room < 170) { callout(word, rest.join(' · '), 1.3); return; }
   const el = $('pops');
+  if (room < 170) {
+    // a phone: a single's kita floats under the Kita chip, so the goal chip stays; bigger clears get the callout
+    if (word === 'ISANG HANAY' && rest.length === 1) {
+      const c = $('h-score').getBoundingClientRect(), o = (el.offsetParent || document.body).getBoundingClientRect();
+      el.innerHTML = `<span class="money">${rest[0]}</span>`; el.classList.add('mini');
+      el.style.left = `${Math.round(c.left - o.left + 6)}px`; el.style.top = `${Math.round(c.bottom - o.top + 2)}px`; el.style.maxWidth = '';
+      el.hidden = false; el.classList.remove('go'); void el.offsetWidth; el.classList.add('go');
+      clearTimeout(scorePop.t); scorePop.t = setTimeout(() => { el.hidden = true; }, 1400);
+    } else callout(word, rest.join(' · '), 1.1);
+    return;
+  }
+  el.classList.remove('mini');
   el.innerHTML = `<b class="${tone}">${word}</b>${rest.map((x, i) => `<span class="${i === 0 ? 'money' : ''}">${x}</span>`).join('')}`;
   el.style.left = `${Math.round(w.right + 16)}px`; el.style.top = `${Math.round(w.top + (w.bottom - w.top) * 0.42)}px`; el.style.maxWidth = `${Math.min(300, room)}px`;
   el.hidden = false; el.classList.remove('go'); void el.offsetWidth; el.classList.add('go');
@@ -580,7 +596,7 @@ function onEvent(e) {
 
 function pause() { if (mode === 'play') { mode = 'pause'; show('pause'); } }
 function resume() { if (mode === 'pause') { mode = 'play'; clearInput(); show(null); } }
-function toMenu() { mode = 'title'; if (newerSave) adopt(newerSave); game = null; job = null; match = null; lesson = null; viewer = null; ghost = null; tap = null; shopPrev = null; if (view) view.setVersus(false); wearLooks(); labels(); show('title'); }
+function toMenu() { mode = 'title'; if (versionWaiting) { location.reload(); return; } if (newerSave) adopt(newerSave); game = null; job = null; match = null; lesson = null; viewer = null; ghost = null; tap = null; shopPrev = null; if (view) view.setVersus(false); wearLooks(); labels(); show('title'); }
 
 // ---------- input ----------
 let KEYS = {};
@@ -591,8 +607,8 @@ let pressed = [];
 function clearInput() { held.clear(); pressed = []; }
 const playing = () => mode === 'play' && game;
 document.addEventListener('keydown', (e) => {
-  if (e.target.closest && e.target.closest('input')) return; // typing a name or password
-  if (!$('ad').hidden) return; // an ad is showing
+  if (e.target.closest && e.target.closest('input') && e.key !== 'Escape') return; // typing a name or password
+  if (adShowing) { if (e.key === 'Escape' && !$('ad').hidden) $('ad-close').click(); return; } // an ad is up: its own buttons only
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (capture && capture.kind === 'key') { e.preventDefault(); captured(k); return; }
   if (match && match.local && (mode === 'play' || mode === 'pause')) {
@@ -611,7 +627,8 @@ document.addEventListener('keydown', (e) => {
   }
   const onButton = document.activeElement?.tagName === 'BUTTON';
   if ((k === ' ' || k === 'Enter') && !onButton && mode === 'title') { e.preventDefault(); start(); return; }
-  if (k === 'p' || k === 'Escape') { if (mode === 'play') pause(); else if (mode === 'pause') resume(); else if (mode === 'settings') $('settings-ok').click(); else if (mode === 'keys') $('keys-ok').click(); else if (mode === 'replay') closeViewer(); else if (['modes', 'shop', 'book', 'stats', 'how', 'replays', 'vs', 'lessons', 'map', 'tapatan'].includes(mode)) toMenu(); else if (mode === 'house') openBook(); }
+  if (k === 'p' && (mode === 'play' || mode === 'pause')) { if (mode === 'play') pause(); else resume(); }
+  else if (k === 'Escape') { if (mode === 'play') pause(); else if (mode === 'pause') resume(); else if (mode === 'settings') $('settings-ok').click(); else if (mode === 'keys') $('keys-ok').click(); else if (mode === 'replay') closeViewer(); else if (['modes', 'shop', 'book', 'stats', 'how', 'replays', 'vs', 'lessons', 'map', 'tapatan', 'account', 'ranking', 'results'].includes(mode)) toMenu(); else if (mode === 'house') openBook(); else if (mode === 'brief') openMap(); else if (mode === 'rival') openVs(); else if (mode === 'lesson') openLessons(); }
   if (mode === 'replay' && k === ' ') { e.preventDefault(); toggleViewer(); }
   if (k === 'm') toggleSound();
 });
@@ -663,7 +680,7 @@ const padWas = {};
 let padHeldDirs = new Set();
 function readPad(dt) {
   const p = navigator.getGamepads ? [...navigator.getGamepads()].filter(Boolean)[0] : null;
-  if (!p) return;
+  if (!p || adShowing) return;
   const b = (i) => !!(p.buttons[i] && p.buttons[i].pressed), ax = p.axes || [];
   const edge = (name, on) => { const was = padWas[name]; padWas[name] = on; return on && !was; };
   const left = b(14) || (ax[0] || 0) < -0.5, right = b(15) || (ax[0] || 0) > 0.5, down = b(13) || (ax[1] || 0) > 0.6, up = b(12) || (ax[1] || 0) < -0.7;
@@ -694,7 +711,7 @@ function readPad(dt) {
   const screen = SCREENS.find((id) => !$(id).hidden);
   if (!screen) { if (edge('start', b(9)) && mode === 'replay') toggleViewer(); if (edge('bb', b(1)) && mode === 'replay') closeViewer(); return; }
   const move = (dx, dy) => {
-    const btns = [...$(screen).querySelectorAll('button, input')].filter((x) => x.offsetParent);
+    const btns = [...$(screen).querySelectorAll('button, input')].filter((x) => x.offsetParent && x.tabIndex >= 0 && !x.disabled);
     const cur = document.activeElement && btns.includes(document.activeElement) ? document.activeElement : null;
     if (!cur) { btns[0]?.focus(); return; }
     if (cur.type === 'range' && dx) { cur.value = +cur.value + dx * +cur.step; cur.dispatchEvent(new Event('input')); return; }
@@ -705,7 +722,7 @@ function readPad(dt) {
   };
   if (edge('mL', left)) move(-1, 0); if (edge('mR', right)) move(1, 0); if (edge('mU', up)) move(0, -1); if (edge('mD', down)) move(0, 1);
   if (edge('a', b(0))) { A.start(); document.activeElement?.click(); }
-  if (edge('bb', b(1))) { if (screen === 'pause') resume(); else if (screen === 'settings') $('settings-ok').click(); else if (['results', 'map', 'stats', 'how', 'vs', 'lessons', 'replays', 'modes', 'shop', 'book', 'tapatan'].includes(screen)) toMenu(); else if (screen === 'house') openBook(); else if (screen === 'brief') openMap(); else if (screen === 'rival') openVs(); else if (screen === 'lesson' || screen === 'lessondone') openLessons(); else if (screen === 'keys') $('keys-ok').click(); }
+  if (edge('bb', b(1))) { if (screen === 'pause') resume(); else if (screen === 'settings') $('settings-ok').click(); else if (['results', 'map', 'stats', 'how', 'vs', 'lessons', 'replays', 'modes', 'shop', 'book', 'tapatan', 'account', 'ranking'].includes(screen)) toMenu(); else if (screen === 'house') openBook(); else if (screen === 'brief') openMap(); else if (screen === 'rival') openVs(); else if (screen === 'lesson' || screen === 'lessondone') openLessons(); else if (screen === 'keys') $('keys-ok').click(); }
   if (edge('start', b(9))) { if (screen === 'pause') resume(); else if (screen === 'title') start(); }
 }
 
@@ -760,9 +777,7 @@ function labels() {
   const st = data.streak || {};
   $('streak').innerHTML = st.count ? `${icon('apoy', 22)} <b>${st.count}</b> araw` : '';
   $('streak').classList.toggle('hot', (st.count || 0) >= 3);
-  const lost = canRescue(data.lostStreak) && adOk('streak') ? data.lostStreak : null;
-  $('ad-streak').hidden = !lost;
-  if (lost) $('ad-streak').innerHTML = `${icon('apoy', 18)} Iligtas ang ${lost.count}-araw na streak<small>patalastas</small>`;
+  streakOffer();
   if ((data.boost?.games || 0) > 0) $('title-rank').innerHTML += ` · <b>2×</b> XP ${data.boost.games}`;
   weeklyBanner();
   $('diff-note').textContent = { madali: 'Madali: mas mabagal ang bagsak at mas matagal bago dumikit.', katamtaman: 'Katamtaman: ang klasiko.', mahirap: 'Mahirap: magsisimula sa ika-6 na palapag.' }[data.difficulty] + ' (Bahay, Klasiko, Deadline, Bagyo, Karera)';
@@ -1155,8 +1170,8 @@ const AD_PROVIDER = Q.get('ads') === 'test' ? { ready: () => true, show: testAd 
 // an ad came ready or went: the screen showing offers shows them again
 let lastDouble = 0;
 function refreshOffers() {
-  if (mode === 'title') labels();
-  else if (mode === 'shop') openShop();
+  if (mode === 'title') streakOffer();
+  else if (mode === 'shop') shopOffers();
   else if (mode === 'brief' && job) $('brief-ad').hidden = !(createGame({ mode: 'proyekto', contract: job }).toolsOn && adOk('tool'));
   else if (mode === 'results' && lastDouble) offerDouble(lastDouble);
 }
@@ -1164,17 +1179,23 @@ function testAd() {
   return new Promise((resolve) => {
     let t = 5, done = false;
     const tick = () => { $('ad-left').textContent = t > 0 ? `${t}` : '✓'; $('ad-claim').hidden = t > 0; };
-    $('ad').hidden = false; A.setMuted(true); tick();
-    const iv = setInterval(() => { t--; tick(); if (t <= 0) clearInterval(iv); }, 1000);
+    $('ad').hidden = false; A.setMuted(true); tick(); $('ad-close').focus();
+    const iv = setInterval(() => { t--; tick(); if (t <= 0) { clearInterval(iv); $('ad-claim').focus(); } }, 1000);
     const end = (ok) => { if (done) return; done = true; clearInterval(iv); $('ad').hidden = true; A.setMuted(data.muted); resolve(ok); };
     $('ad-claim').onclick = () => end(true); $('ad-close').onclick = () => end(false);
   });
 }
 const adOk = (kind) => !!AD_PROVIDER && AD_PROVIDER.ready() && !AUTOPLAY && canOffer(kind, { ads: data.ads, games: Q.get('adtest') === '1' ? 99 : data.stats.games || 0, on: data.opt.offers }, Date.now()); // ?adtest=1: offers from the first game, to check the ads
 const adBtn = (id, label) => `<button type="button" class="adbtn" id="${id}">${icon('play', 16)} ${label}<small>patalastas</small></button>`;
+let adShowing = false;
 async function watchAd(kind) {
-  if (!adOk(kind)) return false;
-  const ok = await AD_PROVIDER.show(kind);
+  if (!adOk(kind) || adShowing) return false;
+  // everything but the ad's own layer goes inert (a real network's ad is added later, so it stays live)
+  const back = document.activeElement, rest = [];
+  for (let n = $('ad'); n && n.parentElement; n = n.parentElement) for (const sib of n.parentElement.children) if (sib !== n && !sib.inert && sib.tagName !== 'SCRIPT') rest.push(sib);
+  adShowing = true; for (const el of rest) el.inert = true;
+  let ok = false;
+  try { ok = await AD_PROVIDER.show(kind); } finally { adShowing = false; for (const el of rest) el.inert = false; if (back && back.isConnected) back.focus({ preventScroll: true }); }
   if (!ok) { toast('Walang gantimpala: hindi tinapos ang patalastas.', 2200); return false; }
   data.ads = spend(kind, data.ads); persist();
   return true;
@@ -1196,8 +1217,13 @@ function shopOffers() {
   else if (adOk('overtime')) bits.push(adBtn('ad-overtime', `Overtime: 2× XP sa ${OFFERS.overtime.games} laro`));
   $('shop-offers').innerHTML = bits.join('');
   $('shop-offers').hidden = !bits.length;
-  if ($('ad-barya')) $('ad-barya').onclick = async () => { if (await watchAd('barya')) { data.coins += OFFERS.barya.coins; persist(); A.event({ type: 'ceremony' }); toast(`+${OFFERS.barya.coins} barya!`, 1800); openShop(); } };
-  if ($('ad-overtime')) $('ad-overtime').onclick = async () => { if (await watchAd('overtime')) { data.boost = { games: OFFERS.overtime.games }; persist(); labels(); toast(`Overtime! Doble ang XP sa susunod na ${OFFERS.overtime.games} laro.`, 2400); openShop(); } };
+  if ($('ad-barya')) $('ad-barya').onclick = async () => { if (await watchAd('barya')) { data.coins += OFFERS.barya.coins; persist(); A.event({ type: 'ceremony' }); toast(`+${OFFERS.barya.coins} barya!`, 1800); openShop(); ($('ad-barya') || $('shop-tabs').querySelector('button'))?.focus({ preventScroll: true }); } };
+  if ($('ad-overtime')) $('ad-overtime').onclick = async () => { if (await watchAd('overtime')) { data.boost = { games: OFFERS.overtime.games }; persist(); labels(); toast(`Overtime! Doble ang XP sa susunod na ${OFFERS.overtime.games} laro.`, 2400); openShop(); ($('ad-barya') || $('shop-tabs').querySelector('button'))?.focus({ preventScroll: true }); } };
+}
+function streakOffer() {
+  const lost = canRescue(data.lostStreak) && adOk('streak') ? data.lostStreak : null;
+  $('ad-streak').hidden = !lost;
+  if (lost) $('ad-streak').innerHTML = `${icon('apoy', 18)} Iligtas ang ${lost.count}-araw na streak<small>patalastas</small>`;
 }
 $('ad-streak').onclick = async () => {
   if (!canRescue(data.lostStreak) || !(await watchAd('streak'))) return;
@@ -1263,10 +1289,10 @@ function openAccount() {
   if (u) {
     $('account-body').innerHTML = `<p class="acct-who">${icon('tao', 40)}<span>Naka-login bilang<b>${esc(u)}</b></span></p>
       <p class="note">Nasa server ang XP, ranggo, barya, medalya, bituin at mga nabili mo, at ang puwesto mo sa Ranking. Kahit burahin ang browser data o lumipat ng device, mag-login lang ulit.</p>
-      <p class="muted" id="acct-msg"></p>
+      <p class="muted" id="acct-msg" role="status"></p>
       <div class="row"><button type="button" class="primary" id="acct-sync">I-sync ngayon</button><button type="button" id="acct-out">Mag-logout</button></div>`;
-    $('acct-sync').onclick = async () => { $('acct-msg').textContent = 'Sini-sync…'; const r = await sync(); if (mode === 'account') $('acct-msg').textContent = r.ok ? 'Naka-save sa server · Saved' : r.error || 'Hindi na-sync.'; };
-    $('acct-out').onclick = async () => { await online.logout(); labels(); toast('Naka-logout. Nasa device pa rin ang progreso mo.', 2400); openAccount(); };
+    $('acct-sync').onclick = async (e) => { const bt = e.currentTarget; if (bt.disabled) return; bt.disabled = true; $('acct-msg').textContent = 'Sini-sync…'; const r = await sync(); bt.disabled = false; if (mode === 'account' && $('acct-msg')) { $('acct-msg').textContent = r.ok ? 'Naka-save sa server · Saved' : r.error || 'Hindi na-sync.'; bt.focus({ preventScroll: true }); } };
+    $('acct-out').onclick = async (e) => { e.currentTarget.disabled = true; await online.logout(); labels(); toast('Naka-logout. Nasa device pa rin ang progreso mo.', 2400); if (mode === 'account') openAccount(); };
   } else {
     const reg = acctTab === 'register';
     $('account-body').innerHTML = `<div class="modes"><button type="button" data-tab="login" aria-pressed="${!reg}">Mag-login</button><button type="button" data-tab="register" aria-pressed="${reg}">Gumawa ng account</button></div>
@@ -1282,14 +1308,16 @@ function openAccount() {
     if (reg) online.prepare(); // the puzzle solves while the name is typed
     $('acct-form').onsubmit = async (e) => {
       e.preventDefault();
-      const f = e.target, btn = f.querySelector('button[type=submit]');
-      btn.disabled = true; $('acct-err').textContent = '';
+      const f = e.target, btn = f.querySelector('button[type=submit]'), tabs = $('account-body').querySelectorAll('[data-tab]');
+      if (btn.disabled) return;
+      btn.disabled = true; for (const t of tabs) t.disabled = true; $('acct-err').textContent = '';
       if (reg) $('acct-err').textContent = 'Sinusuri na hindi ka bot…';
       const user = f.querySelector('[name=user]').value.trim(), pass = f.querySelector('[name=pass]').value;
       const r = reg ? await online.register(user, pass, f.querySelector('[name=website]').value) : await online.login(user, pass);
       if (reg && !r.ok) online.prepare(); // a fresh puzzle for the next try
-      btn.disabled = false;
-      if (!r.ok) { $('acct-err').textContent = r.error || 'Hindi nakapasok.'; return; }
+      btn.disabled = false; for (const t of tabs) t.disabled = false;
+      if (!f.isConnected) return; // the form was redrawn meanwhile
+      if (!r.ok) { $('acct-err').textContent = r.error || 'Hindi nakapasok.'; (r.status === 409 || r.status === 400 && /Pangalan/.test(r.error || '') ? f.querySelector('[name=user]') : r.status === 400 && /[Pp]assword/.test(r.error || '') ? f.querySelector('[name=pass]') : btn).focus({ preventScroll: true }); return; }
       labels();
       toast(reg ? `Maligayang pagdating, ${r.name}!` : `Mabuhay, ${r.name}!`, 2200);
       if (pendingScore) { const p = pendingScore; pendingScore = null; sendScore(p).then((t) => toast(t, 3400)); }
@@ -1308,8 +1336,8 @@ function openRanking(m = rkMode, d = rkDiff || data.difficulty) {
   const b = boardKey(m, d), ask = ++rkAsk;
   $('rk-modes').innerHTML = Object.entries(RANKED).map(([k, n]) => `<button type="button" data-rm="${k}" aria-pressed="${k === m}">${n}</button>`).join('');
   $('rk-diffs').innerHTML = byDiff(m) ? Object.values(DIFFICULTY).map((x) => `<button type="button" data-rd="${x.key}" aria-pressed="${x.key === d}">${x.name}</button>`).join('') : `<span class="muted">${m === 'daily' ? `Daily ${dateKey()} · Katamtaman` : `${weeklyEvent().name} · ${weeklyEvent().week}`}</span>`;
-  for (const x of $('rk-modes').querySelectorAll('[data-rm]')) x.onclick = () => openRanking(x.dataset.rm, d);
-  for (const x of $('rk-diffs').querySelectorAll('[data-rd]')) x.onclick = () => openRanking(m, x.dataset.rd);
+  for (const x of $('rk-modes').querySelectorAll('[data-rm]')) x.onclick = () => { openRanking(x.dataset.rm, d); $('rk-modes').querySelector(`[data-rm="${x.dataset.rm}"]`)?.focus({ preventScroll: true }); };
+  for (const x of $('rk-diffs').querySelectorAll('[data-rd]')) x.onclick = () => { openRanking(m, x.dataset.rd); $('rk-diffs').querySelector(`[data-rd="${x.dataset.rd}"]`)?.focus({ preventScroll: true }); };
   $('rk-body').innerHTML = '<p class="muted">Kinukuha…</p>';
   $('rk-me').textContent = '';
   $('rk-acct').hidden = !!online.user;
@@ -1322,7 +1350,11 @@ function openRanking(m = rkMode, d = rkDiff || data.difficulty) {
     $('rk-me').textContent = `${r.n} manlalaro`;
     if (online.user) online.rank(b).then((me) => { if (ask !== rkAsk || !me.ok) return; $('rk-body').querySelectorAll('li')[me.rank - 1]?.classList.add('me'); $('rk-me').innerHTML = me.rank ? `Ikaw: <b>#${me.rank}</b> sa ${r.n} · ${fmtVal(b, me.value)}` : `Wala ka pa rito, ${esc(me.name)}. Maglaro ng ${RANKED[m]}!`; });
     for (const x of $('rk-body').querySelectorAll('[data-rw]')) x.onclick = async () => {
+      if (x.disabled) return;
+      x.disabled = true;
       const rp = await online.replay(b, x.dataset.rw);
+      x.disabled = false;
+      if (ask !== rkAsk || mode !== 'ranking') return; // left the screen meanwhile
       if (!rp.ok) { toast(rp.error || 'Walang replay.', 2000); return; }
       viewerBack = () => openRanking(m, d); watch(rp.code);
     };
@@ -1566,4 +1598,16 @@ async function boot() {
   }
 }
 boot();
-if ('serviceWorker' in navigator && !TEST) navigator.serviceWorker.register('sw.js').catch(() => { /* online-only then */ });
+if ('serviceWorker' in navigator && !TEST) {
+  navigator.serviceWorker.register('sw.js').catch(() => { /* online-only then */ });
+  // an update: the new worker takes over in the background; reload into it on the title screen (or on
+  // the way back to it), never in the middle of a game. A first visit has no old worker to replace.
+  const hadOld = !!navigator.serviceWorker.controller;
+  let updated = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadOld && !updated) { updated = true; freshVersion(); } });
+}
+let versionWaiting = false;
+function freshVersion() {
+  if (mode === 'title' && !game) { location.reload(); return; }
+  versionWaiting = true; // toMenu reloads
+}

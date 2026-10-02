@@ -67,7 +67,7 @@ body.flat .screen { background: rgba(20,16,24,.86); }
 @keyframes pop { from { transform: translateX(-50%) scale(2) skewX(-12deg); opacity: 0; filter: blur(4px); } }
 #toast { position: absolute; left: 50%; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 28px); transform: translateX(-50%); background: linear-gradient(90deg, transparent, rgba(14,10,18,.85) 10%, rgba(14,10,18,.85) 90%, transparent); padding: 7px 38px; font: italic 800 16px/1.3 "Barlow Condensed", sans-serif; letter-spacing: .03em; text-align: center; max-width: 94vw; width: max-content; pointer-events: none; z-index: 4; }
 body.touch.playing #toast { bottom: 96px; font-size: 14px; }
-body.flat #toast { top: 40%; bottom: auto; width: auto; max-width: 86%; font: 700 13px/1.3 "Baloo 2", sans-serif; border: 2px solid var(--gold); border-radius: 12px; background: rgba(20,16,24,.95); padding: 6px 14px; }
+body.flat #toast { top: auto; bottom: max(14px, env(safe-area-inset-bottom)); width: auto; max-width: 86%; font: 700 13px/1.3 "Baloo 2", sans-serif; border: 2px solid var(--gold); border-radius: 12px; background: rgba(20,16,24,.95); padding: 6px 14px; }
 /* touch controls */
 .pad { display: none; position: fixed; left: 0; right: 0; bottom: 0; gap: 5px; padding: 6px 8px max(8px, env(safe-area-inset-bottom)); justify-content: center; z-index: 3; background: linear-gradient(0deg, rgba(14,10,18,.7), transparent); }
 body.touch.playing .pad { display: flex; }
@@ -262,6 +262,7 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
 .tile .ico { width: 34px; height: 34px; } .tile span { white-space: nowrap; }
 .corner-sound { position: absolute; top: max(12px, env(safe-area-inset-top)); right: 12px; transform: none; }
 #weekly { width: min(640px, 94vw); }
+@media (max-width: 920px) { .hubtiles { grid-template-columns: repeat(5, 1fr); width: min(640px, 94vw); } }
 @media (max-width: 760px) { .hubtiles { grid-template-columns: repeat(5, 1fr); } .tile { font-size: 12px; padding: 8px 2px 6px; } .tile .ico { width: 28px; height: 28px; } .playbig b { font-size: 30px; } .playbig .pb-ico .ico { width: 44px; height: 44px; } .pb-go { display: none; } .playbig { grid-template-columns: auto 1fr; } }
 @media (max-height: 780px) and (min-width: 761px) { #title { gap: 9px; padding-top: 12px; } #title .logo { font-size: clamp(50px, 8.4vw, 96px); } #title .logo small { margin-top: 10px; } }
 .mgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; width: min(1100px, 96vw); }
@@ -273,7 +274,7 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
 .mcard .tagx { position: absolute; top: 8px; right: 8px; font: italic 900 11px/1 "Barlow Condensed", sans-serif; letter-spacing: .12em; padding: 3px 7px; background: #e8402a; color: #fff; }
 @media (max-width: 600px) { .mcard { min-height: 112px; padding: 9px; } .mcard b { font-size: 18px; } .mcard small { font-size: 11.5px; } .mcard .ico { width: 32px; height: 32px; } }
 #shop { align-items: flex-start; justify-content: flex-start; background: linear-gradient(90deg, rgba(14,10,18,.82), rgba(14,10,18,.5) 46%, transparent 62%); }
-.shopcard { width: min(560px, 96vw); max-width: none; text-align: left; display: grid; gap: 8px; max-height: calc(100vh - 70px); overflow-y: auto; }
+.shopcard { width: min(560px, 96vw, 100%); max-width: none; box-sizing: border-box; text-align: left; display: grid; gap: 8px; max-height: calc(100vh - 70px); overflow-y: auto; }
 .shophead { display: flex; justify-content: space-between; align-items: center; gap: 10px; } .shophead h2 { font-size: 40px; }
 #shop-tabs { justify-content: flex-start; }
 .sgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
@@ -330,6 +331,8 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
   background: linear-gradient(180deg, rgba(58,40,20,.95), rgba(24,16,10,.95)); border: 2px solid var(--gold); box-shadow: 0 0 0 2px var(--dark), 0 0 18px rgba(255,200,80,.35); clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 100%, 0 100%); }
 #callout b { display: block; font: italic 900 24px/1 "Barlow Condensed", sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--gold); }
 #callout em { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; font: italic 800 13px/1.15 "Barlow Condensed", sans-serif; letter-spacing: .04em; color: #fff8e1; }
+#callout b[hidden] + em { -webkit-line-clamp: 6; } /* a hint (no title) gets room to finish */
+#pops.mini b { display: none; } #pops.mini span { font-size: 17px; }
 #callout.pop { animation: pop .35s cubic-bezier(.2,1.4,.4,1); }
 .chip.mid.under { visibility: hidden; }
 @media (max-width: 560px) { #callout { max-width: calc(100vw - 190px); padding: 3px 12px 4px; } #callout b { font-size: 18px; } #callout em { font-size: 11.5px; } }
@@ -341,6 +344,26 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
 #pops.go { animation: popsRise 1.4s ease-out forwards; }
 @keyframes popsRise { 0% { opacity: 0; transform: translateY(14px) scale(.9); } 12% { opacity: 1; transform: translateY(0) scale(1.04); } 25% { transform: none; } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-22px); } }
 @media (prefers-reduced-motion: reduce) { #pops.go { animation: none; } }
+/* solid layout: a screen with too much content scrolls; its parts never squash into each other */
+.screen > * { flex-shrink: 0; }
+/* touch: everything you tap is at least about 40px */
+body.touch .corner button { min-height: 42px; min-width: 42px; padding: 4px 12px; }
+@media (max-width: 560px) { #pause-btn button span { display: none; } } /* a phone: just ❚❚, clear of the next-piece board */
+body.touch input[type=range] { height: 34px; }
+body.touch .kchip button { min-width: 32px; min-height: 32px; font-size: 16px; }
+body.touch .kt .add { min-height: 40px; }
+.acct-form ~ .note a, .note a[href="privacy.html"] { display: inline-block; padding: 6px 2px; }
+/* a short landscape screen (a phone on its side): the title fits without scrolling */
+@media (max-height: 500px) and (orientation: landscape) {
+  #title { gap: 5px; padding-top: 6px; padding-bottom: 30px; }
+  #title .logo { font-size: 42px; } #title .logo small { margin-top: 4px; font-size: .3em; }
+  .hchip { padding: 2px 10px 1px; font-size: 12px; } .hchip b { font-size: 14px; }
+  .playbig { padding: 5px 18px; gap: 12px; width: min(520px, 80vw); } .playbig b { font-size: 26px; } .playbig #play-mode { font-size: 14px; }
+  .playbig .pb-ico .ico { width: 34px; height: 34px; } .pb-go { font-size: 16px; padding: 6px 12px; }
+  .tile { padding: 5px 2px 4px; gap: 2px; font-size: 11px; } .tile .ico { width: 24px; height: 24px; }
+  #weekly { padding: 4px 12px; } #weekly span { display: none; } #weekly b { font-size: 18px; } #weekly button { min-height: 34px; }
+  .screen { padding-top: 10px; padding-bottom: 30px; gap: 8px; }
+}
 </style>
 </head>
 <body>
@@ -356,7 +379,7 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
         <div class="chip" id="h-best"><small>Best</small><b>₱0</b></div>
       </div>
       <div id="tools" hidden><span></span><span></span><span></span><small>E · GAMIT</small></div>
-      <div class="corner" id="pause-btn" hidden><button type="button" aria-label="Pause">❚❚ Hinto</button></div>
+      <div class="corner" id="pause-btn" hidden><button type="button" aria-label="Pause · Hinto">❚❚<span> Hinto</span></button></div>
       <div id="ghostbar" hidden><span><i data-icon="ghost"></i> MULTO</span><div class="track"><span class="fill"></span><i class="gh"></i><i class="you"></i></div><b></b></div>
       <div id="lesson-corner" hidden><button type="button" id="lretry">Ulit · Retry (R)</button><div id="lesson-tip"></div></div>
       <div id="finesse" hidden></div>
@@ -366,8 +389,8 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
     <div id="rbubble" hidden></div>
     <div id="bubble" hidden></div>
     <div id="big" hidden><b></b><span></span></div>
-    <div id="callout" hidden><b></b><em></em></div>
-    <div id="pops" hidden></div>
+    <div id="callout" role="status" aria-live="polite" hidden><b></b><em></em></div>
+    <div id="pops" aria-hidden="true" hidden></div>
     <div id="toast" role="status" hidden></div>
 
     <section class="screen" id="title">
@@ -447,7 +470,7 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
       <p class="stars" id="results-stars" hidden></p>
       <div class="score" id="results-score"></div>
       <p id="results-best"></p>
-      <p class="muted" id="results-rank" hidden></p>
+      <p class="muted" id="results-rank" role="status" hidden></p>
       <div class="card stats" id="results-stats"></div>
       <div class="xp" id="results-xp"></div>
       <div class="medals" id="results-medals"></div>
@@ -502,7 +525,7 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
       <div class="modes" id="rk-modes" role="group" aria-label="Mode"></div>
       <div class="modes" id="rk-diffs" role="group" aria-label="Difficulty"></div>
       <div class="card rk" id="rk-body"></div>
-      <p class="muted" id="rk-me"></p>
+      <p class="muted" id="rk-me" role="status"></p>
       <div class="row"><button type="button" id="rk-acct" hidden>Mag-login para makasali</button><button type="button" class="menu">Bumalik · Back</button></div>
     </section>
 
@@ -519,7 +542,7 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
         <li><b>Phone:</b> tap para iikot, i-drag para gumalaw, i-flick pababa para ibagsak, pataas para mag-imbak; may mga button din. <b>Controller:</b> d-pad, ✕ ikot, ○ pabalik, △ imbak, □ gamit.</li>
         <li><b>Bayanihan:</b> apat na hanay nang sabay. Ang T-spin at sunod-sunod na Bayanihan ay may dagdag na kita.</li>
         <li><b>Gamit (tools):</b> minsan may kahon ng gamit ang isang piraso. Linisin ang hanay nito (o mag-Bayanihan) para makakuha, hanggang tatlo. <i data-icon="martilyo"></i> Martilyo: basag ang pinakamataas na bloke sa ilalim ng piraso. <i data-icon="semento"></i> Semento: tapalan ang mga butas sa ibaba. <i data-icon="kreyn"></i> Kreyn: gawing kawayan ang piraso. <i data-icon="pison"></i> Pison: patagin ang tumpok. <i data-icon="merienda"></i> Merienda: bagal ang bagsak nang 15 segundo.</li>
-        <li><b>Mga mode:</b> Bahay (walang katapusan), Deadline (40 hanay), Bagyo (putik mula sa ilalim), Karera (2 minuto, pinakamataas na kita), Daily (parehong piraso para sa lahat ngayong araw), Proyekto (15 kontrata, 1–3 bituin).</li>
+        <li><b>Mga mode:</b> Bahay (walang katapusan), Klasiko (iisang bilis buong laro, walang gamit), Deadline (40 hanay), Bagyo (putik mula sa ilalim), Karera (2 minuto, pinakamataas na kita), Daily (parehong piraso para sa lahat ngayong araw), Proyekto (15 kontrata, 1–3 bituin).</li>
         <li><b>Laban:</b> ang well mo at ang sa kalaban, magkatabi. Bawat clear ay nagpapadala ng putik (2 hanay = 1, 3 = 2, Bayanihan = 4, T-spin double = 4, may dagdag ang sunod-sunod at combo). Ang paparating na putik (mga sako sa tabi ng well) ay nahaharang ng sarili mong clear. Talunin ang anim sa Liga ng Barangay.</li>
         <li><b>Tapatan (2P, desktop):</b> dalawang tao sa isang keyboard (P1: A D S W, Q E, C; P2: mga arrow, , . /) o may controller. Pinakamahusay sa tatlo; may handicap sa padala at sa simulang taas.</li>
         <li><b>Proyekto Kabanata 2:</b> brownout (flashlight lang), hangin (dumudulas ang piraso), bitak (gumuguho ang bloke), Lunes (walang kawayan), limitadong gamit, at ang City Inspector na nagtatatak ng REJECTED. Linisin ang tatak para may dagdag na oras.</li>

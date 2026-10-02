@@ -15,7 +15,8 @@ export function createGoogleAds({ test = false, onChange = () => {}, mute = () =
   document.head.appendChild(s);
   push({ preloadAdBreaks: 'on', sound: 'on' });
 
-  let showFn = null, pending = null, wait = 4e3, timer = 0;
+  let showFn = null, pending = null, wait = 4e3, timer = 0, was = false;
+  const changed = () => { const now = !!showFn; if (now !== was) { was = now; onChange(now); } }; // only when readiness flips
   const settle = (ok) => { const p = pending; pending = null; if (p) p(ok); };
   // ask for the next rewarded ad; with none to give (or none loaded yet), ask again soon, then less often
   function ask() {
@@ -24,11 +25,11 @@ export function createGoogleAds({ test = false, onChange = () => {}, mute = () =
     push({
       type: 'reward', name: 'gantimpala',
       beforeAd: () => mute(true), afterAd: () => mute(false),
-      beforeReward: (fn) => { offered = true; showFn = fn; wait = 4e3; onChange(true); },
+      beforeReward: (fn) => { offered = true; showFn = fn; wait = 4e3; changed(); },
       adViewed: () => settle(true),
       adDismissed: () => settle(false),
       adBreakDone: () => {
-        showFn = null; settle(false); onChange(false);
+        showFn = null; settle(false); changed();
         timer = setTimeout(ask, offered ? 1500 : wait);
         if (!offered) wait = Math.min(wait * 2, 10 * 60e3);
       },
@@ -38,6 +39,6 @@ export function createGoogleAds({ test = false, onChange = () => {}, mute = () =
   return {
     ready: () => !!showFn,
     // called from the player's click: plays the ad, true if it was watched to the end
-    show: () => new Promise((resolve) => { if (!showFn) { resolve(false); return; } pending = resolve; const fn = showFn; showFn = null; fn(); }),
+    show: () => new Promise((resolve) => { if (!showFn) { resolve(false); return; } pending = resolve; const fn = showFn; showFn = null; changed(); fn(); }),
   };
 }
