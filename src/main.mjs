@@ -1,17 +1,21 @@
 // The page: screens, modes, settings, input (keys, touch gestures and buttons, a controller), the loop,
 // sound, saves and hints. The rules live in game.mjs; the 3D site in view3d.mjs, and if WebGL won't
 // start, the old 2D drawing in render.mjs takes over and the game plays the same.
-import { createGame, step, MODES, DIFFICULTY, cellsOf, pendingRows } from './game.mjs';
+import { createGame, step, MODES, DIFFICULTY, cellsOf, pendingRows, TOOLS } from './game.mjs';
 import { bot } from './bot.mjs';
 import { createMatch, matchStep, LADDER, LEVELS, rivalById, ladderOpen } from './versus.mjs';
 import { createRecorder, record, encode, decode, startPlayback, playTick, runToEnd } from './replay.mjs';
 import { LESSONS, lessonById, lessonFor, lessonGame, judge, createCoach, coachTick } from './training.mjs';
 import { DEF_KEYS_P1, DEF_KEYS_P2, routes, createInput, press as pressIn, drain, clearInput as clearIn } from './controls.mjs';
 import { ranked } from './bot.mjs';
+import { ITEMS, KINDS, itemById, isOwned, canBuy, buy, equip, unlockMet, coinsFor, DEFAULT_EQUIP } from './shop.mjs';
+import { hapticFor, apply as applyHaptic } from './haptics.mjs';
+import { createVoice, VOICE_LINES } from './voice.mjs';
 import { createAudio } from './audio.mjs';
 import { CONTRACTS, BARANGAYS, CHAPTERS, chapterOpen, contractById, starsFor, unlocked, brgyStars, describe } from './contracts.mjs';
 import { icon, portrait } from './icons.mjs';
-import { xpFor, rankOf, RANKS, STYLES, styleOpen, MEDALS, newMedals, addStats, dateKey, dailySeed, shareText, toolsetFor, TOOL_RANK, weeklyEvent, countdown, WEEKLY_MEDALS, EVENTS } from './progress.mjs';
+import { createOnline, RANKED, byDiff } from './online.mjs';
+import { xpFor, rankOf, RANKS, STYLES, styleOpen, MEDALS, newMedals, addStats, dateKey, dailySeed, shareText, toolsetFor, TOOL_RANK, weeklyEvent, countdown, WEEKLY_MEDALS, EVENTS, touchStreak } from './progress.mjs';
 
 const Q = new URLSearchParams(location.search);
 const TEST = Q.get('test') === '1';
@@ -21,6 +25,9 @@ const store = {
   get() { if (TEST) return null; try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } },
   set(v) { if (TEST) return; try { localStorage.setItem(KEY, JSON.stringify(v)); } catch { /* storage unavailable: play on */ } },
 };
+// the server (accounts, the cloud save, Ranking): this deploy's own on Vercel; the GitHub Pages copy and
+// a local server use the live one
+const online = createOnline(Q.get('api') ?? (location.hostname.endsWith('.vercel.app') ? '' : 'https://hollow-blocks.vercel.app'));
 const TIPS = [
   'Ang Bayanihan, apat na hanay nang sabay, ang pinakamalaking kita.',
   'Itabi ang kawayan sa IMBAK para sa Bayanihan.',
@@ -85,14 +92,21 @@ const data = {
   keys1: validMap(saved.keys1, DEF_KEYS_P1, (k) => typeof k === 'string'), keys2: validMap(saved.keys2, DEF_KEYS_P2, (k) => typeof k === 'string'),
   tap: { src: ['keys', 'keys'], mult: [1, 1], rubble: [0, 0], ...(saved.tap && typeof saved.tap === 'object' ? saved.tap : {}) },
   weekly: saved.weekly && typeof saved.weekly === 'object' ? saved.weekly : {}, tokens: Number.isFinite(saved.tokens) ? saved.tokens : 0, wmedals: Array.isArray(saved.wmedals) ? saved.wmedals : [],
+  // v8: barya, the locker, the login streak
+  coins: Number.isFinite(saved.coins) ? saved.coins : 0, owned: Array.isArray(saved.owned) ? saved.owned.filter((id) => itemById(id)) : [],
+  equip: { ...DEFAULT_EQUIP, ...(saved.equip && typeof saved.equip === 'object' ? saved.equip : {}) }, streak: saved.streak && typeof saved.streak === 'object' ? saved.streak : null,
 };
+data.opt = { haptics: true, voice: true, voiceVol: 0.8, ...data.opt };
 if (touch && data.mode === 'tapatan') data.mode = 'bahay'; // two players need a keyboard
 if (!MODES[data.mode]) data.mode = 'bahay';
 for (const el of document.querySelectorAll('[data-icon]')) el.innerHTML = icon(el.dataset.icon, el.closest('.pad') ? 30 : 20);
-const persist = () => store.set(data);
+let pushT = 0;
+const persist = () => { store.set(data); if (online.user && !TEST) { clearTimeout(pushT); pushT = setTimeout(pushSave, 3000); } };
 const reduced = () => data.calm || matchMedia('(prefers-reduced-motion: reduce)').matches;
 const seed = () => (TEST && Q.get('seed') ? Number(Q.get('seed')) : Math.floor(Math.random() * 1e9));
-const buzz = (p) => { try { if (navigator.vibrate && touch) navigator.vibrate(p); } catch { /* no haptics */ } };
+const buzz = (p) => { try { if (navigator.vibrate && touch && data.opt.haptics !== false) navigator.vibrate(p); } catch { /* no haptics */ } };
+// haptics for a game event: the phone buzzes, every controller rumbles, scaled by the moment
+const feel = (e) => { if (data.opt.haptics === false) return; const h = hapticFor(e); if (h) applyHaptic(h, { touch, pads: navigator.getGamepads ? [...navigator.getGamepads()].filter(Boolean) : [] }); };
 const clock = (ticks) => { const s = ticks / 60; return `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`; };
 const peso = (n) => `₱${Math.floor(n).toLocaleString('en-US')}`;
 const bestKey = () => `${data.mode}.${data.difficulty}`;
@@ -101,6 +115,10 @@ const $ = (id) => document.getElementById(id);
 let view = null, R = null; // the 3D view, or the 2D renderer when WebGL is missing
 const A = createAudio();
 A.setMuted(data.muted); A.setMix(data.opt);
+const V = createVoice(A);
+V.setOn(data.opt.voice !== false); V.setVolume(data.opt.voiceVol);
+// Kapatas says a voice slot's line: the bubble shows it, the voice speaks it
+function speak(slot) { say(null, true, VOICE_LINES[slot]); if (data.opt.voice !== false && !AUTOPLAY) V.say(slot, VOICE_LINES[slot]); }
 
 let mode = 'title', game = null, job = null; // job: the contract being played
 let match = null, vsPick = null, lesson = null, coach = null, rec = null, ghost = null, viewer = null, capture = null;
@@ -112,7 +130,7 @@ const tapKeys = () => { tapRoutes = routes([data.tap.src[0] === 'keys' ? data.ke
 let demo = newDemo();
 function newDemo() { return createGame({ seed: seed(), mode: 'bahay', difficulty: 'madali' }); }
 
-const SCREENS = ['title', 'safety', 'pause', 'results', 'settings', 'map', 'brief', 'stats', 'how', 'rankup', 'vs', 'rival', 'lessons', 'lesson', 'lessondone', 'replays', 'keys', 'tapatan'];
+const SCREENS = ['account', 'ranking', 'title', 'safety', 'pause', 'results', 'settings', 'map', 'brief', 'stats', 'how', 'rankup', 'vs', 'rival', 'lessons', 'lesson', 'lessondone', 'replays', 'keys', 'tapatan', 'modes', 'shop', 'book', 'house'];
 function show(name) {
   for (const id of SCREENS) { const el = $(id), on = id === name; if (on && el.hidden) { el.classList.remove('in'); void el.offsetWidth; el.classList.add('in'); } el.hidden = !on; }
   if (name) { toasts.length = 0; $('toast').hidden = true; $('big').hidden = true; bigT = 0; }
@@ -123,6 +141,7 @@ function show(name) {
   $('lesson-corner').hidden = !(name === null && lesson && mode === 'play');
   if (name !== null || mode === 'replay') { $('ghostbar').hidden = true; $('finesse').hidden = true; $('rbubble').hidden = true; }
   document.body.classList.toggle('playing', name === null && mode !== 'replay');
+  document.body.classList.toggle('on-title', name === 'title');
   document.body.classList.toggle('replaying', name === null && mode === 'replay');
   const first = name && ($(name).querySelector('button.primary') || $(name).querySelector('button'));
   if (first) first.focus({ preventScroll: true });
@@ -161,8 +180,9 @@ function start() {
   } else {
     const diff = daily || data.mode === 'proyekto' || data.mode === 'lingguhan' ? 'katamtaman' : data.difficulty;
     const wk = data.mode === 'lingguhan' ? weeklyEvent() : null;
-    game = createGame({ seed: wk ? dailySeed(wk.week) : sd, mode: data.mode, difficulty: diff, contract: data.mode === 'proyekto' ? job : wk ? wk.contract : null, opts, toolset: toolsetFor(data.xp) });
-    rec = createRecorder({ v: 1, mode: data.mode, diff, seed: sd, job: data.mode === 'proyekto' && job ? job.id : undefined, opts });
+    const gs = wk ? dailySeed(wk.week) : sd, ts = toolsetFor(data.xp);
+    game = createGame({ seed: gs, mode: data.mode, difficulty: diff, contract: data.mode === 'proyekto' ? job : wk ? wk.contract : null, opts, toolset: ts });
+    rec = createRecorder({ v: 1, mode: data.mode, diff, seed: gs, job: data.mode === 'proyekto' && job ? job.id : undefined, ev: wk ? wk.id : undefined, ts: ts.length > TOOLS.length ? ts : undefined, opts });
     if (data.rules.ghost && (data.mode === 'deadline' || data.mode === 'karera')) loadGhost(game, bestKey());
   }
   if (view) view.setVersus(!!match, match ? match.prof : null);
@@ -204,18 +224,19 @@ function finish(done) {
       data.weekly = prevW; isBest = g.score >= prevW.best && g.score > 0;
     }
     if (g.mode === 'daily') { const dk = dateKey(); const prevD = data.daily[dk]; if (!prevD || g.score > prevD.score) data.daily = { [dk]: { score: g.score, lines: g.lines, bayanihan: g.stats.bayanihan } }; }
-    const before = rankOf(data.xp), gain = xpFor(r);
-    data.xp += gain; data.stats = addStats(data.stats, r);
+    const before = rankOf(data.xp), gain = xpFor(r), coins = coinsFor(r);
+    data.xp += gain; data.stats = addStats(data.stats, r); data.coins += coins;
     const after = rankOf(data.xp);
     const fresh = newMedals(r, { medals: data.medals, stats: data.stats, xp: data.xp, brgyStars: [0, 1, 2].map((b) => brgyStars(data.stars, b)) });
     data.medals.push(...fresh);
     persist();
     keepReplay(g, isBest);
+    rankGame(g, done);
     $('watch').hidden = !rec;
     $('watch').onclick = () => { if (replays.last) watch(replays.last.code); };
     $('results-stars').hidden = g.mode !== 'proyekto';
     $('results-stars').innerHTML = [1, 2, 3].map((k) => `<span class="${k <= stars ? '' : 'off'}">★</span>`).join('');
-    $('results-xp').innerHTML = `+${gain} XP · ${after.name}${after.next ? ` · ${after.need} pa para sa ${after.next}` : ''}<i style="--p:${Math.round(after.progress * 100)}%"></i>`;
+    $('results-xp').innerHTML = `+${gain} XP · +${coins} barya · ${after.name}${after.next ? ` · ${after.need} pa para sa ${after.next}` : ''}<i style="--p:${Math.round(after.progress * 100)}%"></i>`;
     $('results-medals').innerHTML = fresh.map((id) => { const m = MEDALS.find((x) => x.id === id); return `<div class="medal got fresh"><b>★</b>${m.name}</div>`; }).join('');
     const nextJob = g.mode === 'proyekto' && stars > 0 ? CONTRACTS[CONTRACTS.findIndex((c) => c.id === g.contract.id) + 1] : null;
     $('next-job').hidden = !(nextJob && unlocked(data.stars, nextJob.id)); $('next-job').textContent = 'Susunod na Kontrata';
@@ -237,7 +258,7 @@ function finish(done) {
       const st = STYLES.find((x) => x.rank === rankUp.index);
       $('rankup-name').textContent = rankUp.name;
       $('rankup-note').textContent = st ? `Bagong istilo ng bahay: ${st.name}. Piliin sa Tala at Medalya.` : 'Ang pinakamataas na ranggo sa site!';
-      show('rankup'); if (view) setTimeout(() => view.celebrate(), 200); A.event({ type: 'ceremony' }); buzz([40, 30, 80]);
+      show('rankup'); if (view) setTimeout(() => view.celebrate(), 200); A.event({ type: 'ceremony' }); buzz([40, 30, 80]); setTimeout(() => { if (data.opt.voice !== false) V.say('rankup'); }, 600);
       clearTimeout(rankT); rankT = setTimeout(() => { if (!$('rankup').hidden) show('results'); }, 4500);
     } else show('results');
   }, done ? 1800 : 1600);
@@ -253,13 +274,14 @@ function finishVersus(winner) {
     const r = { mode: 'versus', done: win, ticks: g.elapsed, score: g.score, lines: g.lines, level: g.level, pieces: g.pieces, bayanihan: g.stats.bayanihan, tspins: g.stats.tspins, tspinTriple: g.stats.tspinTriple || 0, maxCombo: g.stats.maxCombo, perfect: g.stats.perfect, tools: 0 };
     const ladderI = LADDER.findIndex((x) => x.id === m.rival);
     if (win) { data.vs.wins++; if (ladderI >= 0 && !data.vs.beaten.includes(m.rival)) data.vs.beaten.push(m.rival); }
-    const before = rankOf(data.xp), gain = xpFor(r) + (win ? 150 + Math.max(0, ladderI) * 50 : 0);
-    data.xp += gain; data.stats = addStats(data.stats, r);
+    const before = rankOf(data.xp), gain = xpFor(r) + (win ? 150 + Math.max(0, ladderI) * 50 : 0), coins = coinsFor({ ...r, win });
+    data.xp += gain; data.stats = addStats(data.stats, r); data.coins += coins;
     const after = rankOf(data.xp);
     const fresh = newMedals(r, { medals: data.medals, stats: data.stats, xp: data.xp, brgyStars: [0, 1, 2].map((b) => brgyStars(data.stars, b)) });
     data.medals.push(...fresh);
     persist();
     keepReplay(g, false);
+    $('results-rank').hidden = true;
     $('watch').hidden = false; $('watch').onclick = () => { if (replays.last) watch(replays.last.code); };
     $('results-stars').hidden = true; $('share').hidden = true;
     $('results-title').textContent = winner === 'draw' ? 'Tabla!' : win ? 'Panalo!' : 'Talo…';
@@ -268,7 +290,7 @@ function finishVersus(winner) {
     $('results-best').className = win ? 'new' : 'muted';
     const stat = (label, v) => `<div><span>${label}</span><b>${v}</b></div>`;
     $('results-stats').innerHTML = stat('Ipinadala', `${m.sent[0]} putik`) + stat('Natanggap', `${m.got[0]} putik`) + stat('Hanay', g.lines) + stat('Piraso/seg', (g.pieces / secs).toFixed(2)) + stat('T-spin', g.stats.tspins) + stat('Oras', clock(m.tick));
-    $('results-xp').innerHTML = `+${gain} XP · ${after.name}${after.next ? ` · ${after.need} pa para sa ${after.next}` : ''}<i style="--p:${Math.round(after.progress * 100)}%"></i>`;
+    $('results-xp').innerHTML = `+${gain} XP · +${coins} barya · ${after.name}${after.next ? ` · ${after.need} pa para sa ${after.next}` : ''}<i style="--p:${Math.round(after.progress * 100)}%"></i>`;
     $('results-medals').innerHTML = fresh.map((id) => { const md = MEDALS.find((x) => x.id === id); return `<div class="medal got fresh"><b>★</b>${md.name}</div>`; }).join('');
     const nxt = win && ladderI >= 0 ? LADDER[ladderI + 1] : null;
     $('next-job').hidden = !nxt; $('next-job').textContent = nxt ? `Susunod: ${nxt.name}` : '';
@@ -297,7 +319,7 @@ function tapKo(winner) {
     $('results-best').textContent = 'Tapatan · pinakamahusay sa tatlo'; $('results-best').className = 'new';
     const stat = (label, v) => `<div><span>${label}</span><b>${v}</b></div>`;
     $('results-stats').innerHTML = stat('P1 padala', `${m.sent[0]} putik`) + stat('P2 padala', `${m.sent[1]} putik`) + stat('Ronda', tap.round) + stat('P1 hanay', m.a.lines) + stat('P2 hanay', m.b.lines) + stat('Oras', clock(m.tick));
-    $('results-xp').innerHTML = ''; $('results-medals').innerHTML = ''; $('results-stars').hidden = true; $('share').hidden = true; $('watch').hidden = true; $('next-job').hidden = true;
+    $('results-xp').innerHTML = ''; $('results-medals').innerHTML = ''; $('results-stars').hidden = true; $('share').hidden = true; $('watch').hidden = true; $('next-job').hidden = true; $('results-rank').hidden = true;
     $('results-tip').textContent = `"Ganyan ang tapatan! Kamayan na kayo." — Kapatas`;
     if (view) view.celebrate(); A.event({ type: 'ceremony' }); buzz([40, 30, 80]);
     tap = null;
@@ -450,21 +472,24 @@ function big(title, sub = '', secs = 1.4) {
   el.hidden = false; el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); bigT = secs;
 }
 let bubbleT = 0, sayCool = 0, sinceI = 0, rankUp = null, rankT = 0;
-function say(k, force = false) {
-  if (!view) { if (R && SAYS[k]) R.say(k, pick(SAYS[k])); return; }
+function say(k, force = false, text = null) {
+  const line = text || (SAYS[k] ? pick(SAYS[k]) : null);
+  if (!line) return;
+  if (!view) { if (R) R.say(k, line); return; }
   if (!force && sayCool > 0) return;
-  const el = $('bubble'); el.textContent = pick(SAYS[k]); bubbleT = 2.4; sayCool = 1.2;
+  const el = $('bubble'); el.textContent = line; bubbleT = 2.4; sayCool = 1.2;
   el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
 }
 
 function onEvent(e) {
   if (view) view.event(e, game); else R.event(e, game);
   A.event(e);
+  feel(e);
   switch (e.type) {
     case 'go': say('go', true); break;
     case 'lines':
-      if (e.n === 4) { buzz([30, 30, 60]); big('BAYANIHAN!', e.b2b ? 'Sunod-sunod! ×1.5' : 'Tulong-tulong!', 1.6); say('four', true); }
-      else { buzz(15); if (e.spin) say('tspin', true); else if (e.b2b) say('b2b', true); else if (e.combo >= 2) say('combo'); else if (Math.random() < 0.3) say('one'); }
+      if (e.n === 4) { big('BAYANIHAN!', e.b2b ? 'Sunod-sunod! ×1.5' : 'Tulong-tulong!', 1.6); speak('bayanihan'); }
+      else { if (e.spin) speak('tspin'); else if (e.b2b) say('b2b', true); else if (e.combo >= 2) say('combo'); else if (Math.random() < 0.3) say('one'); }
       if (e.n === 1) hint('bayanihan', 'Tip: apat na hanay nang sabay ay BAYANIHAN, ang pinakamalaking kita!');
       break;
     case 'tspin': say('tspin', true); break;
@@ -474,10 +499,10 @@ function onEvent(e) {
       break;
     case 'levelUp': if (!(view && game.mode === 'bahay' && (1 + Math.floor(game.lines / 10)) % 5 === 0)) { big(`Palapag ${e.level}!`, 'Bagong palapag · New floor', 1.5); say('level', true); } break;
     case 'rise': if (Math.random() < 0.35) say('rise'); hint('bagyo', 'Tumataas ang baha mula sa ilalim! Punuin ang butas para matanggal ang putik.'); break;
-    case 'hardDrop': buzz(10); break;
+    case 'hardDrop': break;
     case 'toolEarned': toast(`May bagong gamit: ${e.tool.toUpperCase()}! Pindutin ang ${touch ? 'kahon ng gamit' : 'E'} para gamitin.`, 2400); buzz([10, 20, 10]); break;
-    case 'tool': buzz(25); say('tool', true); break;
-    case 'lindol': buzz([60, 40, 60]); say('lindol', true); break;
+    case 'tool': say('tool', true); break;
+    case 'lindol': say('lindol', true); break;
     case 'perfect': big('MALINIS!', 'Perfect clear', 1.6); break;
     case 'stamp': inspSays('stamp'); buzz(30); break;
     case 'passed': inspSays('passed'); break;
@@ -485,15 +510,15 @@ function onEvent(e) {
     case 'lights': if (!e.on) hint('brownout', 'Brownout! Ang flashlight lang ang ilaw: sundan ang piraso.'); break;
     case 'crumble': hint('bitak', 'May bitak ang piraso: guguho ito pagkatapos ng ilang piraso.'); break;
     case 'andamyo': big('ANDAMYO!', e.why === 'topout' ? 'Sinalo ng andamyo ang pader!' : 'Sinalo ang putik', 1.4); break;
-    case 'gameover': if (game && game.insp) inspSays('lost', true); say('over', true); if (lesson) verdict('fail'); else if (!match) finish(false); break;
-    case 'done': if (lesson) break; if (game && game.insp) inspSays('won', true); big('TAPOS!', game && game.mode === 'lingguhan' ? weeklyEvent().name : 'Deadline met!', 2); say('done', true); finish(true); break;
+    case 'gameover': if (game && game.insp) inspSays('lost', true); if (!match) speak('lose'); else say('over', true); if (lesson) verdict('fail'); else if (!match) finish(false); break;
+    case 'done': if (lesson) break; if (game && game.insp) inspSays('won', true); big('TAPOS!', game && game.mode === 'lingguhan' ? weeklyEvent().name : 'Deadline met!', 2); speak('win'); finish(true); break;
     default: break;
   }
 }
 
 function pause() { if (mode === 'play') { mode = 'pause'; show('pause'); } }
 function resume() { if (mode === 'pause') { mode = 'play'; clearInput(); show(null); } }
-function toMenu() { mode = 'title'; game = null; job = null; match = null; lesson = null; viewer = null; ghost = null; tap = null; if (view) view.setVersus(false); labels(); show('title'); }
+function toMenu() { mode = 'title'; if (newerSave) adopt(newerSave); game = null; job = null; match = null; lesson = null; viewer = null; ghost = null; tap = null; shopPrev = null; if (view) view.setVersus(false); wearLooks(); labels(); show('title'); }
 
 // ---------- input ----------
 let KEYS = {};
@@ -504,6 +529,7 @@ let pressed = [];
 function clearInput() { held.clear(); pressed = []; }
 const playing = () => mode === 'play' && game;
 document.addEventListener('keydown', (e) => {
+  if (e.target.closest && e.target.closest('input')) return; // typing a name or password
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (capture && capture.kind === 'key') { e.preventDefault(); captured(k); return; }
   if (match && match.local && (mode === 'play' || mode === 'pause')) {
@@ -522,7 +548,7 @@ document.addEventListener('keydown', (e) => {
   }
   const onButton = document.activeElement?.tagName === 'BUTTON';
   if ((k === ' ' || k === 'Enter') && !onButton && mode === 'title') { e.preventDefault(); start(); return; }
-  if (k === 'p' || k === 'Escape') { if (mode === 'play') pause(); else if (mode === 'pause') resume(); else if (mode === 'settings') $('settings-ok').click(); else if (mode === 'keys') $('keys-ok').click(); else if (mode === 'replay') closeViewer(); }
+  if (k === 'p' || k === 'Escape') { if (mode === 'play') pause(); else if (mode === 'pause') resume(); else if (mode === 'settings') $('settings-ok').click(); else if (mode === 'keys') $('keys-ok').click(); else if (mode === 'replay') closeViewer(); else if (['modes', 'shop', 'book', 'stats', 'how', 'replays', 'vs', 'lessons', 'map', 'tapatan'].includes(mode)) toMenu(); else if (mode === 'house') openBook(); }
   if (mode === 'replay' && k === ' ') { e.preventDefault(); toggleViewer(); }
   if (k === 'm') toggleSound();
 });
@@ -616,7 +642,7 @@ function readPad(dt) {
   };
   if (edge('mL', left)) move(-1, 0); if (edge('mR', right)) move(1, 0); if (edge('mU', up)) move(0, -1); if (edge('mD', down)) move(0, 1);
   if (edge('a', b(0))) { A.start(); document.activeElement?.click(); }
-  if (edge('bb', b(1))) { if (screen === 'pause') resume(); else if (screen === 'settings') $('settings-ok').click(); else if (['results', 'map', 'stats', 'how', 'vs', 'lessons', 'replays'].includes(screen)) toMenu(); else if (screen === 'brief') openMap(); else if (screen === 'rival') openVs(); else if (screen === 'lesson' || screen === 'lessondone') openLessons(); else if (screen === 'keys') $('keys-ok').click(); }
+  if (edge('bb', b(1))) { if (screen === 'pause') resume(); else if (screen === 'settings') $('settings-ok').click(); else if (['results', 'map', 'stats', 'how', 'vs', 'lessons', 'replays', 'modes', 'shop', 'book', 'tapatan'].includes(screen)) toMenu(); else if (screen === 'house') openBook(); else if (screen === 'brief') openMap(); else if (screen === 'rival') openVs(); else if (screen === 'lesson' || screen === 'lessondone') openLessons(); else if (screen === 'keys') $('keys-ok').click(); }
   if (edge('start', b(9))) { if (screen === 'pause') resume(); else if (screen === 'title') start(); }
 }
 
@@ -630,33 +656,64 @@ function padTo(p, inp, ns) {
   for (const [act, list] of Object.entries(data.pad)) { const on = list.some((i) => b(i)) || (act === 'hard' && list.includes(12) && (ax[1] || 0) < -0.7); if (edge(`p:${act}`, on)) { if (act === 'pause') pause(); else pressIn(inp, act, true); } }
 }
 function toggleSound() { A.start(); data.muted = !data.muted; A.setMuted(data.muted); persist(); labels(); }
-function labels() {
-  for (const b of document.querySelectorAll('.sound')) { b.textContent = data.muted ? '🔇' : '🔊'; b.setAttribute('aria-label', data.muted ? 'Sound off, turn it on' : 'Sound on, turn it off'); }
-  for (const b of document.querySelectorAll('[data-diff]')) b.setAttribute('aria-pressed', String(b.dataset.diff === data.difficulty));
-  for (const b of document.querySelectorAll('[data-mode]')) b.setAttribute('aria-pressed', String(b.dataset.mode === data.mode));
-  $('mode-note').textContent = {
-    bahay: 'Bahay: walang katapusan. Bawat 10 hanay, bagong palapag at mas mabilis. May gamit (tools)!',
-    deadline: 'Deadline: 40 hanay sa tanghaling tapat, pinakamabilis na oras ang panalo.',
-    bagyo: 'Bagyo: tumataas ang putik mula sa ilalim. Tumagal hangga’t kaya!',
-    karera: 'Karera: dalawang minuto, pinakamataas na kita. May gamit!',
-    daily: `Daily ${dateKey()}: parehong mga piraso para sa lahat ngayong araw. Dalawang minuto.${data.daily[dateKey()] ? ` Best mo ngayon: ${peso(data.daily[dateKey()].score)}` : ''}`,
-    proyekto: `Proyekto: ${CONTRACTS.length} kontrata sa ${BARANGAYS.length} barangay, dalawang kabanata. ${CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0)}/${CONTRACTS.length * 3} bituin.`,
-    tapatan: 'Tapatan: dalawang tao, isang keyboard. Pinakamahusay sa tatlong ronda, may handicap.',
-    lingguhan: `Lingguhan: ${weeklyEvent().name}. ${weeklyEvent().blurb}`,
-    versus: `Laban: ang well mo laban sa kalaban, magpadala ng putik. Liga ng Barangay: ${data.vs.beaten.length}/${LADDER.length} natalo.`,
-    training: `Pagsasanay: ${LESSONS.length} aralin ni Kapatas (T-spin, combo, finesse). ${data.lessons.length}/${LESSONS.length} pasado.`,
-  }[data.mode];
-  const rk = rankOf(data.xp);
-  $('title-rank').textContent = `Ranggo: ${rk.name} · ${data.xp.toLocaleString('en-US')} XP${rk.next ? ` (${rk.need.toLocaleString('en-US')} pa para sa ${rk.next})` : ''} · ${data.medals.length}/${MEDALS.length} medalya`;
-  for (const b of document.querySelectorAll('[data-diff]')) b.disabled = ['daily', 'proyekto', 'versus', 'training', 'tapatan', 'lingguhan'].includes(data.mode);
-  weeklyBanner();
-  $('diff-note').textContent = { madali: 'Madali: mas mabagal ang bagsak at mas matagal bago dumikit.', katamtaman: 'Katamtaman: ang klasiko.', mahirap: 'Mahirap: magsisimula sa ika-6 na palapag.' }[data.difficulty];
-  const b = data.best[bestKey()];
-  $('title-best').textContent = ['proyekto', 'daily', 'versus', 'training', 'tapatan', 'lingguhan'].includes(data.mode) ? '' : b ? `Best (${MODES[data.mode].name}, ${DIFFICULTY[data.difficulty].name}): ${data.mode === 'deadline' ? clock(b) : peso(b)}` : '';
+// The modes, for the PLAY button and the Mga Laro cards: an icon, a line, and your best.
+const MODE_INFO = {
+  bahay: { icon: 'bahay', line: 'Walang katapusan. Bawat 10 hanay, bagong palapag. May gamit.', diff: true },
+  deadline: { icon: 'orasan', line: '40 hanay sa tanghaling tapat. Pinakamabilis ang panalo.', diff: true },
+  bagyo: { icon: 'bagyo', line: 'Tumataas ang putik mula sa ilalim. Tumagal hangga’t kaya.', diff: true },
+  karera: { icon: 'karera', line: 'Dalawang minuto, pinakamataas na kita. May gamit.', diff: true },
+  daily: { icon: 'calendar', line: 'Parehong piraso para sa lahat ngayong araw. Dalawang minuto.' },
+  lingguhan: { icon: 'token', line: 'Ang twist ngayong linggo. Medalya at token.' },
+  proyekto: { icon: 'blueprint', line: `${CONTRACTS.length} kontrata sa ${BARANGAYS.length} barangay, may City Inspector.` },
+  versus: { icon: 'vs', line: 'Ang well mo laban sa kalaban. Magpadala ng putik.' },
+  tapatan: { icon: 'duo', line: 'Dalawang tao, isang keyboard. Pinakamahusay sa tatlo.', desk: true },
+  training: { icon: 'libro', line: 'Mga aralin ni Kapatas: T-spin, combo, finesse.' },
+};
+const modeName = (m) => (m === 'versus' ? 'Laban' : m === 'training' ? 'Pagsasanay' : m === 'tapatan' ? 'Tapatan' : MODES[m] ? MODES[m].name : m);
+function modeBest(m) {
+  const b = data.best[`${m}.${data.difficulty}`];
+  if (m === 'bahay' || m === 'karera' || m === 'bagyo') return b ? `Best ${peso(b)}` : 'Wala pang best';
+  if (m === 'deadline') return b ? `Best ${clock(b)}` : 'Wala pang best';
+  if (m === 'daily') return data.daily[dateKey()] ? `Ngayon ${peso(data.daily[dateKey()].score)}` : `Daily ${dateKey()}`;
+  if (m === 'lingguhan') { const w = weeklyEvent(); return `${w.name}${data.weekly.week === w.week && data.weekly.best ? ` · ${peso(data.weekly.best)}` : ''}`; }
+  if (m === 'proyekto') return `${CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0)}/${CONTRACTS.length * 3} ★`;
+  if (m === 'versus') return `Liga ${data.vs.beaten.length}/${LADDER.length} · ${data.vs.wins} panalo`;
+  if (m === 'training') return `${data.lessons.length}/${LESSONS.length} pasado`;
+  return '2 manlalaro';
 }
+function labels() {
+  for (const b of document.querySelectorAll('.sound')) { b.innerHTML = icon(data.muted ? 'mute' : 'speaker', 24); b.setAttribute('aria-label', data.muted ? 'Sound off, turn it on' : 'Sound on, turn it off'); }
+  for (const b of document.querySelectorAll('[data-diff]')) b.setAttribute('aria-pressed', String(b.dataset.diff === data.difficulty));
+  // the hub: PLAY is the last mode played
+  const m = MODE_INFO[data.mode] ? data.mode : 'bahay', info = MODE_INFO[m];
+  $('play-ico').innerHTML = icon(info.icon, 58);
+  $('play-mode').textContent = `${modeName(m)}${info.diff ? ` · ${DIFFICULTY[data.difficulty].name}` : ''}`;
+  $('play-best').textContent = modeBest(m);
+  $('acct-label').textContent = online.user || 'Account';
+  const rk = rankOf(data.xp);
+  $('title-rank').innerHTML = `${rk.name} · <b>${data.xp.toLocaleString('en-US')}</b> XP`;
+  $('wallet').innerHTML = `${icon('barya', 20)} <b>${(data.coins || 0).toLocaleString('en-US')}</b> ${icon('token', 20)} <b>${data.tokens}</b>`;
+  const st = data.streak || {};
+  $('streak').innerHTML = st.count ? `${icon('apoy', 22)} <b>${st.count}</b> araw` : '';
+  $('streak').classList.toggle('hot', (st.count || 0) >= 3);
+  weeklyBanner();
+  $('diff-note').textContent = { madali: 'Madali: mas mabagal ang bagsak at mas matagal bago dumikit.', katamtaman: 'Katamtaman: ang klasiko.', mahirap: 'Mahirap: magsisimula sa ika-6 na palapag.' }[data.difficulty] + ' (Bahay, Deadline, Bagyo, Karera)';
+}
+// Mga Laro: a card per mode; picking one plays it (or opens its own screen)
+function openModes() {
+  mode = 'modes';
+  $('modes-body').innerHTML = Object.entries(MODE_INFO).filter(([k, v]) => !(v.desk && touch)).map(([k, v]) => `<button type="button" class="mcard" data-mode="${k}" aria-pressed="${k === data.mode}">${k === 'lingguhan' ? '<span class="tagx">NGAYONG LINGGO</span>' : ''}${icon(v.icon, 42)}<b>${modeName(k)}</b><small>${v.line}</small><em>${modeBest(k)}</em></button>`).join('');
+  for (const b of $('modes-body').querySelectorAll('[data-mode]')) b.onclick = () => pickMode(b.dataset.mode);
+  show('modes');
+}
+function pickMode(m) {
+  data.mode = m; job = null; vsPick = null; lesson = null; persist(); labels();
+  if (m === 'proyekto') openMap(); else if (m === 'versus') openVs(); else if (m === 'training') openLessons(); else if (m === 'tapatan') openTapatan(); else start();
+}
+$('modes-btn').onclick = openModes;
+$('lessons-btn').onclick = () => { data.mode = 'training'; openLessons(); };
 for (const b of document.querySelectorAll('.sound')) b.onclick = toggleSound;
-for (const b of document.querySelectorAll('[data-diff]')) b.onclick = () => { data.difficulty = b.dataset.diff; persist(); labels(); };
-for (const b of document.querySelectorAll('[data-mode]')) b.onclick = () => { data.mode = b.dataset.mode; job = null; vsPick = null; lesson = null; persist(); labels(); if (data.mode === 'proyekto') openMap(); else if (data.mode === 'versus') openVs(); else if (data.mode === 'training') openLessons(); else if (data.mode === 'tapatan') openTapatan(); };
+for (const b of document.querySelectorAll('[data-diff]')) b.onclick = () => { data.difficulty = b.dataset.diff; persist(); labels(); if (mode === 'modes') openModes(); };
 
 // ---------- settings ----------
 let settingsFrom = 'title';
@@ -678,7 +735,9 @@ function openSettings(from) {
     <p class="muted">Anggulo · Angle</p>${seg('angle', [[true, 'Pahilig · Angled'], [false, 'Tuwid · Straight']])}
     <p class="muted">Yanig ng camera · Camera shake</p>${seg('calm', [[false, 'Buo · Full'], [true, 'Kalmado · Reduced']])}
     </div><div class="grp"><h3>Tunog at itsura · Sound and look</h3>
-    ${slider('music', 'Musika · Music')}${slider('sfx', 'Tunog · Effects')}
+    ${slider('music', 'Musika · Music')}${slider('sfx', 'Tunog · Effects')}${slider('voiceVol', 'Boses · Voice')}
+    <p class="muted">Boses ni Kapatas · Voice</p>${seg('voice', [[true, 'Oo · On'], [false, 'Wala · Off']])}
+    <p class="muted">Yanig · Haptics (phone, controller)</p>${seg('haptics', [[true, 'Oo · On'], [false, 'Wala · Off']])}
     <p class="muted">Graphics</p>${seg('gfx', [['auto', 'Auto'], [2, 'Mataas'], [1, 'Katamtaman'], [0, 'Mababa']])}</div>
     <div class="grp"><h3>Kontrol · Controls</h3>
     <p class="muted">Susunod na piraso · Next queue</p>${rseg('next', [1, 2, 3, 4, 5, 6].map((n) => [n, n]))}
@@ -697,14 +756,14 @@ function openSettings(from) {
     if (k.startsWith('r:')) { data.rules[k.slice(2)] = raw === 'null' ? null : v; persist(); openSettings(settingsFrom); return; }
     if (k === 'gfx') { data.gfx = v; if (view) { view.post.setAuto(v === 'auto'); view.post.setLevel(v === 'auto' ? (touch ? 1 : 2) : v); applyGfx(); } }
     else if (k === 'calm') data.calm = v;
-    else { o[k] = v; if (k === 'angle' && view) view.setAngled(v); }
+    else { o[k] = v; if (k === 'angle' && view) view.setAngled(v); if (k === 'voice') { V.setOn(v); if (v) V.say('win'); } if (k === 'haptics' && v) feel({ type: 'lines', n: 2 }); }
     persist(); openSettings(settingsFrom);
   };
   $('open-keys').onclick = () => { remapTarget = 'solo'; openKeys(); };
   for (const r of $('settings-body').querySelectorAll('input[type=range]')) r.oninput = () => {
     if (r.dataset.k === 'r:das') { data.rules.das = +r.value ? +r.value : null; $('v-das').textContent = dasTxt(); persist(); return; }
     if (r.dataset.k === 'r:arr') { data.rules.arr = +r.value < 0 ? null : +r.value; $('v-arr').textContent = arrTxt(); persist(); return; }
-    o[r.dataset.k] = +r.value; A.start(); A.setMix(o); if (r.dataset.k === 'sfx') A.event({ type: 'lock', piece: 'O', cells: [] }); persist(); };
+    o[r.dataset.k] = +r.value; if (r.dataset.k === 'voiceVol') { V.setVolume(+r.value); persist(); return; } A.start(); A.setMix(o); if (r.dataset.k === 'sfx') A.event({ type: 'lock', piece: 'O', cells: [] }); persist(); };
   show('settings');
   if (again && $('settings-body').querySelector(again)) $('settings-body').querySelector(again).focus({ preventScroll: true });
 }
@@ -820,7 +879,7 @@ function toggleViewer() {
   if (viewer.ended) { const code = viewer.code; watch(code); return; }
   viewer.paused = !viewer.paused; viewerUi();
 }
-function closeViewer() { viewer = null; if (view) view.setVersus(false); location.hash && history.replaceState(null, '', location.pathname + location.search); openReplays(); }
+function closeViewer() { viewer = null; if (view) view.setVersus(false); location.hash && history.replaceState(null, '', location.pathname + location.search); const b = viewerBack; viewerBack = null; (b || openReplays)(); }
 $('rb-play').onclick = toggleViewer;
 for (const b of document.querySelectorAll('[data-speed]')) b.onclick = () => { if (viewer) { viewer.speed = +b.dataset.speed; viewerUi(); } };
 $('rb-share').onclick = () => { if (viewer) shareReplay(viewer.code); };
@@ -914,6 +973,210 @@ function inspHud(dt) {
   if (on) { const hw = el.offsetWidth / 2 + 6; p.x = Math.max(hw, Math.min(innerWidth - hw, p.x)); el.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) translate(-50%, -100%)`; }
 }
 
+// ---------- Tindahan: the shop and the locker, previewed live on the site behind ----------
+let shopTab = 'skin', shopPrev = null;
+const profile = () => ({ coins: data.coins, tokens: data.tokens, owned: data.owned, equip: data.equip, xp: data.xp, medals: data.medals });
+const looks = (over = null) => { const e = { ...DEFAULT_EQUIP, ...data.equip }; if (over) e[over.kind] = over.id; return e; };
+function wearLooks(over = null) { const e = looks(over); if (view) { view.setSkin(e.skin); view.setOutfit(e.outfit); view.setTheme(e.theme); } }
+const priceText = (it) => (it.price ? [it.price.coins ? `${icon('barya', 16)} ${it.price.coins}` : '', it.price.tokens ? `${icon('token', 16)} ${it.price.tokens}` : ''].join(' ') : it.unlock ? `${icon('lock', 14)} ${it.unlock.medal ? MEDALS.find((m) => m.id === it.unlock.medal)?.name || 'Medalya' : RANKS[it.unlock.rank].name}` : 'Libre');
+function openShop(tab = shopTab) {
+  mode = 'shop'; shopTab = tab;
+  const p = profile(), e = looks(), prev = shopPrev ? itemById(shopPrev) : itemById(e[tab]);
+  $('shop-wallet').innerHTML = `${icon('barya', 20)} <b>${data.coins.toLocaleString('en-US')}</b> ${icon('token', 20)} <b>${data.tokens}</b>`;
+  $('shop-tabs').innerHTML = Object.entries(KINDS).map(([k, n]) => `<button type="button" data-tab="${k}" aria-pressed="${k === tab}">${n}</button>`).join('');
+  $('shop-body').innerHTML = ITEMS.filter((it) => it.kind === tab).map((it) => { const own = isOwned(it, p), on = e[it.kind] === it.id; return `<button type="button" class="sitem ${prev && prev.id === it.id ? 'prev' : ''} ${own ? '' : 'locked'}" data-item="${it.id}" aria-pressed="${on}"><span class="swatch">${it.swatch.map((c) => `<i style="background:${c}"></i>`).join('')}</span><b>${it.name}</b><em>${on ? `${icon('check', 14)} Suot` : own ? 'Iyo na' : priceText(it)}</em></button>`; }).join('');
+  if (prev) {
+    const own = isOwned(prev, p), on = e[prev.kind] === prev.id, can = canBuy(prev, p);
+    const btn = on ? `<button type="button" disabled>${icon('check', 16)} Suot na</button>` : own ? `<button type="button" class="primary" id="shop-equip">Isuot · Equip</button>` : prev.price ? `<button type="button" class="primary" id="shop-buy" ${can ? '' : 'disabled'}>Bilhin ${priceText(prev)}</button>` : `<button type="button" disabled>${priceText(prev)}</button>`;
+    $('shop-detail').innerHTML = `<b>${prev.name}</b><div class="row">${btn}</div><p>${prev.desc}${!own && prev.price && !can ? ' <i class="muted">Kulang pa ang ipon.</i>' : ''}${!own && prev.unlock ? ` <i class="muted">Bukas kapag nakuha ang ${prev.unlock.medal ? 'medalyang ' + (MEDALS.find((m) => m.id === prev.unlock.medal)?.name || '') : 'ranggong ' + RANKS[prev.unlock.rank].name}.</i>` : ''}</p>`;
+    if ($('shop-equip')) $('shop-equip').onclick = () => { const r = equip(prev, profile()); if (r.ok) { data.equip = r.p.equip; persist(); shopPrev = null; wearLooks(); A.event({ type: 'levelUp' }); openShop(tab); } };
+    if ($('shop-buy')) $('shop-buy').onclick = () => { const r = buy(prev, profile()); if (r.ok) { Object.assign(data, { coins: r.p.coins, tokens: r.p.tokens, owned: r.p.owned }); const q = equip(prev, profile()); if (q.ok) data.equip = q.p.equip; persist(); shopPrev = null; wearLooks(); A.event({ type: 'ceremony' }); buzz([20, 20, 40]); toast(`Nabili: ${prev.name}!`, 1800); openShop(tab); } };
+  } else $('shop-detail').innerHTML = '';
+  wearLooks(prev);
+  for (const b of $('shop-tabs').querySelectorAll('[data-tab]')) b.onclick = () => { shopPrev = null; openShop(b.dataset.tab); };
+  for (const b of $('shop-body').querySelectorAll('[data-item]')) b.onclick = () => { shopPrev = b.dataset.item; openShop(tab); };
+  if ($('shop').hidden) show('shop');
+}
+$('shop-btn').onclick = () => { shopPrev = null; openShop('skin'); };
+
+// ---------- Mga Naitayong Bahay: every house finished in Bahay, with a picture from the site ----------
+const HKEY = 'hollowblocks.houses';
+let houses = [];
+try { if (!TEST) { const h = JSON.parse(localStorage.getItem(HKEY)); if (Array.isArray(h)) houses = h; } } catch { /* none yet */ }
+const saveHouses = () => { if (TEST) return; for (let n = houses.length; n > 0; n--) { try { localStorage.setItem(HKEY, JSON.stringify(houses.slice(0, n))); return; } catch { /* too big: keep fewer */ } } };
+function recordHouse(g, floors) {
+  if (g.mode !== 'bahay') return;
+  const e = looks(), h = { id: Date.now(), style: data.style, floors, date: dateKey(), score: g.score, lines: g.lines, ticks: g.elapsed, skin: e.skin, theme: e.theme, thumb: null };
+  houses.unshift(h); houses = houses.slice(0, 48); saveHouses();
+  if (view) setTimeout(() => view.snapshot(360, 220, 'house').then((u) => { h.thumb = u; saveHouses(); }), 900);
+}
+const styleName = (id) => (STYLES.find((x) => x.id === id) || STYLES[0]).name;
+function openBook() {
+  mode = 'book';
+  $('book-note').textContent = houses.length ? `${houses.length} bahay · ${houses.reduce((a, h) => a + h.floors, 0)} palapag lahat` : '';
+  $('book-body').innerHTML = houses.length ? houses.map((h, i) => `<button type="button" class="bitem" data-h="${i}">${h.thumb ? `<img src="${h.thumb}" alt="">` : `<img alt="">`}<b>${styleName(h.style)} · ${h.floors} palapag</b><small>${h.date} · ${peso(h.score)}</small></button>`).join('') : `<p class="note card">Wala pang natapos na bahay. Sa Bahay, bawat limang palapag ay isang buong bahay: may larawan ito rito.</p>`;
+  for (const b of $('book-body').querySelectorAll('[data-h]')) b.onclick = () => openHouse(houses[+b.dataset.h]);
+  show('book');
+}
+function openHouse(h) {
+  mode = 'house';
+  $('house-img').src = h.thumb || ''; $('house-name').textContent = `${styleName(h.style)} · ${h.floors} palapag`; $('house-date').textContent = `Natapos ${h.date}`;
+  const stat = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
+  $('house-stats').innerHTML = stat('Kita', peso(h.score)) + stat('Hanay', h.lines) + stat('Oras', clock(h.ticks)) + stat('Bloke', itemById(h.skin)?.name || 'Klasiko') + stat('Site', itemById(h.theme)?.name || 'Barangay') + stat('Palapag', h.floors);
+  $('house-share').onclick = () => shareHouse(h);
+  show('house');
+}
+// a card picture: the house, its name and numbers, in the game's colours; shared, or saved as a PNG
+function shareHouse(h) {
+  const c = document.createElement('canvas'); c.width = 900; c.height = 640; const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 640); g.addColorStop(0, '#2a1e30'); g.addColorStop(1, '#120d14'); x.fillStyle = g; x.fillRect(0, 0, 900, 640);
+  const done = () => {
+    x.fillStyle = '#ffd23f'; x.font = 'italic 900 54px "Barlow Condensed", sans-serif'; x.fillText(`${styleName(h.style).toUpperCase()} · ${h.floors} PALAPAG`, 40, 560);
+    x.fillStyle = '#fff8e1'; x.font = '700 24px "Baloo 2", sans-serif'; x.fillText(`${peso(h.score)} · ${h.lines} hanay · ${clock(h.ticks)} · ${h.date}`, 40, 600);
+    x.fillStyle = '#e8d8c8'; x.font = 'italic 800 22px "Barlow Condensed", sans-serif'; x.textAlign = 'right'; x.fillText('HOLLOW BLOCKS · hollow-blocks.vercel.app', 860, 600);
+    c.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], `hollow-blocks-bahay-${h.date}.png`, { type: 'image/png' });
+      try { if (navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Hollow Blocks', text: `Natapos ko ang ${styleName(h.style)}: ${h.floors} palapag!` }).catch(() => {}); return; } } catch { /* download instead */ }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      toast('Naka-save ang larawan · Image saved', 1800);
+    }, 'image/png');
+  };
+  x.strokeStyle = '#ffd23f'; x.lineWidth = 8; x.strokeRect(36, 36, 828, 470);
+  if (h.thumb) { const im = new Image(); im.onload = () => { x.drawImage(im, 40, 40, 820, 462); done(); }; im.onerror = done; im.src = h.thumb; } else done();
+}
+$('book-btn').onclick = openBook;
+$('house-back').onclick = openBook;
+
+// ---------- the daily login streak ----------
+function streakDay() {
+  const r = touchStreak(data.streak);
+  if (!r.bonus) return;
+  data.streak = r.st; data.xp += r.bonus.xp; data.coins += r.bonus.coins; persist();
+  setTimeout(() => toast(`${r.graced ? 'Nailigtas ng palugit ang streak mo! ' : ''}Araw ${r.st.count} ng streak: +${r.bonus.xp} XP, +${r.bonus.coins} barya`, 3200), 1200);
+}
+
+// ---------- online: the account, the cloud save and Ranking (online.mjs, api/_hb.mjs) ----------
+// The save with more XP wins (XP only grows): a newer one from another device or from before the browser
+// was cleared is loaded at once on the title screen, or on the way back to it after a game.
+let newerSave = null, pendingScore = null, viewerBack = null, rkMode = 'bahay', rkDiff = null, rkAsk = 0, acctTab = 'login';
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+function adopt(d) {
+  if (mode !== 'title' && mode !== 'account') { newerSave = d; return; }
+  newerSave = null;
+  store.set(d);
+  if (store.get()?.xp !== d.xp) return; // this browser keeps nothing: play on as is
+  try { sessionStorage.setItem('hollowblocks.restored', '1'); } catch { /* no toast then */ }
+  location.reload();
+}
+async function pushSave() {
+  const r = await online.push(data);
+  if (r.status === 409 && r.data) adopt(r.data);
+  return r;
+}
+async function sync() {
+  const r = await online.pull();
+  if (!r.ok) return r;
+  if (r.data && r.data.xp > data.xp) { adopt(r.data); return r; }
+  return pushSave();
+}
+// a finished game goes to its board: the server plays the replay through to rank it
+function rankGame(g, done) {
+  const el = $('results-rank'), r0 = rec;
+  el.hidden = true; pendingScore = null;
+  if (!r0 || !RANKED[g.mode] || (g.mode === 'deadline' ? !done : !(g.score > 0))) return;
+  el.hidden = false; el.className = 'muted';
+  const code = encode(r0);
+  code.catch(() => { /* no CompressionStream: sendScore says so */ });
+  if (!online.user) {
+    pendingScore = code;
+    el.innerHTML = `<button type="button" id="rank-login">${icon('ranking', 18)} Mag-login para sa Ranking</button>`;
+    $('rank-login').onclick = () => openAccount();
+    return;
+  }
+  el.textContent = 'Ipinapadala sa Ranking…';
+  sendScore(code).then((t) => { if (game === g && mode === 'results') { el.textContent = t; } });
+}
+async function sendScore(codeP) {
+  let code;
+  try { code = await codeP; } catch { return 'Hindi maipadala ang replay dito.'; }
+  const r = await online.submit(code);
+  if (!r.ok) return r.error || 'Hindi naipadala.';
+  return `#${r.rank} sa ${boardName(r.board)} (sa ${r.of})${r.improved ? ' · bagong best sa Ranking!' : ` · best mo: ${fmtVal(r.board, r.best)}`}`;
+}
+const fmtVal = (b, v) => (b.startsWith('deadline.') ? clock(v) : peso(v));
+function boardName(b) { const [m, d] = b.split('.'); return `${RANKED[m]}${byDiff(m) ? ` · ${DIFFICULTY[d].name}` : ''}`; }
+function boardKey(m, d) { return byDiff(m) ? `${m}.${d}` : m === 'daily' ? `daily.${dateKey()}` : `lingguhan.${weeklyEvent().week}`; }
+
+function openAccount() {
+  mode = 'account';
+  const u = online.user;
+  if (u) {
+    $('account-body').innerHTML = `<p class="acct-who">${icon('tao', 40)}<span>Naka-login bilang<b>${esc(u)}</b></span></p>
+      <p class="note">Nasa server ang XP, ranggo, barya, medalya, bituin at mga nabili mo, at ang puwesto mo sa Ranking. Kahit burahin ang browser data o lumipat ng device, mag-login lang ulit.</p>
+      <p class="muted" id="acct-msg"></p>
+      <div class="row"><button type="button" class="primary" id="acct-sync">I-sync ngayon</button><button type="button" id="acct-out">Mag-logout</button></div>`;
+    $('acct-sync').onclick = async () => { $('acct-msg').textContent = 'Sini-sync…'; const r = await sync(); if (mode === 'account') $('acct-msg').textContent = r.ok ? 'Naka-save sa server · Saved' : r.error || 'Hindi na-sync.'; };
+    $('acct-out').onclick = async () => { await online.logout(); labels(); toast('Naka-logout. Nasa device pa rin ang progreso mo.', 2400); openAccount(); };
+  } else {
+    const reg = acctTab === 'register';
+    $('account-body').innerHTML = `<div class="modes"><button type="button" data-tab="login" aria-pressed="${!reg}">Mag-login</button><button type="button" data-tab="register" aria-pressed="${reg}">Gumawa ng account</button></div>
+      <form id="acct-form" class="acct-form" novalidate>
+        <label>Pangalan <small>3–16: letra, numero, _ . -</small><input name="user" autocomplete="username" maxlength="16" autocapitalize="off" spellcheck="false" required></label>
+        <label>Password <small>6 o higit pa</small><input name="pass" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" maxlength="72" required></label>
+        <p class="acct-err" id="acct-err" role="alert"></p>
+        <button type="submit" class="primary">${reg ? 'Gumawa at mag-login' : 'Mag-login'}</button>
+      </form>
+      <p class="note">${reg ? 'Ang progreso mo sa device na ito ay dadalhin sa bagong account. <b>Walang email:</b> tandaan ang password mo.' : 'Mag-login para maibalik ang progreso mo at makasali sa Ranking, kahit na-clear ang browser.'}</p>`;
+    for (const b of $('account-body').querySelectorAll('[data-tab]')) b.onclick = () => { acctTab = b.dataset.tab; openAccount(); };
+    $('acct-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const f = e.target, btn = f.querySelector('button[type=submit]');
+      btn.disabled = true; $('acct-err').textContent = '';
+      const r = await (reg ? online.register : online.login)(f.querySelector('[name=user]').value.trim(), f.querySelector('[name=pass]').value);
+      btn.disabled = false;
+      if (!r.ok) { $('acct-err').textContent = r.error || 'Hindi nakapasok.'; return; }
+      labels();
+      toast(reg ? `Maligayang pagdating, ${r.name}!` : `Mabuhay, ${r.name}!`, 2200);
+      if (pendingScore) { const p = pendingScore; pendingScore = null; sendScore(p).then((t) => toast(t, 3400)); }
+      const s = await sync();
+      if (mode === 'account') openAccount();
+      if (!s.ok && s.error) toast(s.error, 3000);
+    };
+    if (!touch) setTimeout(() => $('acct-form')?.querySelector('[name=user]').focus(), 50);
+  }
+  show('account');
+}
+$('acct-btn').onclick = () => openAccount();
+
+function openRanking(m = rkMode, d = rkDiff || data.difficulty) {
+  mode = 'ranking'; rkMode = m; rkDiff = d;
+  const b = boardKey(m, d), ask = ++rkAsk;
+  $('rk-modes').innerHTML = Object.entries(RANKED).map(([k, n]) => `<button type="button" data-rm="${k}" aria-pressed="${k === m}">${n}</button>`).join('');
+  $('rk-diffs').innerHTML = byDiff(m) ? Object.values(DIFFICULTY).map((x) => `<button type="button" data-rd="${x.key}" aria-pressed="${x.key === d}">${x.name}</button>`).join('') : `<span class="muted">${m === 'daily' ? `Daily ${dateKey()} · Katamtaman` : `${weeklyEvent().name} · ${weeklyEvent().week}`}</span>`;
+  for (const x of $('rk-modes').querySelectorAll('[data-rm]')) x.onclick = () => openRanking(x.dataset.rm, d);
+  for (const x of $('rk-diffs').querySelectorAll('[data-rd]')) x.onclick = () => openRanking(m, x.dataset.rd);
+  $('rk-body').innerHTML = '<p class="muted">Kinukuha…</p>';
+  $('rk-me').textContent = '';
+  $('rk-acct').hidden = !!online.user;
+  show('ranking');
+  online.board(b).then((r) => {
+    if (ask !== rkAsk || mode !== 'ranking') return;
+    if (!r.ok) { $('rk-body').innerHTML = `<p class="muted">${esc(r.error || 'Hindi makuha ang Ranking.')}</p>`; return; }
+    const mine = r.me && r.me.rank;
+    $('rk-body').innerHTML = r.top.length ? `<ol class="rk-list">${r.top.map((x, i) => `<li class="${mine === i + 1 ? 'me' : ''}"><span class="rk-n">${i + 1}</span><span class="rk-name">${esc(x.name)}</span><b>${fmtVal(b, x.value)}</b><button type="button" data-rw="${x.id}" aria-label="Panoorin ang laro ni ${esc(x.name)}">${icon('play', 14)}</button></li>`).join('')}</ol>`
+      : `<p class="muted">Wala pang nakapasok dito. Ikaw na ang mauna!</p>`;
+    $('rk-me').innerHTML = !r.me ? `${r.n} manlalaro` : r.me.rank ? `Ikaw: <b>#${r.me.rank}</b> sa ${r.n} · ${fmtVal(b, r.me.value)}` : `Wala ka pa rito, ${esc(r.me.name)}. Maglaro ng ${RANKED[m]}!`;
+    for (const x of $('rk-body').querySelectorAll('[data-rw]')) x.onclick = async () => {
+      const rp = await online.replay(b, x.dataset.rw);
+      if (!rp.ok) { toast(rp.error || 'Walang replay.', 2000); return; }
+      viewerBack = () => openRanking(m, d); watch(rp.code);
+    };
+  });
+}
+$('rank-btn').onclick = () => openRanking();
+$('rk-acct').onclick = () => openAccount();
+
 // ---------- the stats page: rank, totals, medals, the house style ----------
 function openStats() {
   mode = 'stats';
@@ -939,7 +1202,7 @@ $('stats-ok').onclick = () => toMenu();
 $('rankup-ok').onclick = () => { clearTimeout(rankT); show('results'); };
 $('how-btn').onclick = () => { mode = 'how'; show('how'); };
 $('how-ok').onclick = () => toMenu();
-$('play').onclick = start;
+$('play').onclick = () => { const m = MODE_INFO[data.mode] ? data.mode : 'bahay'; if (m === 'tapatan' && touch) { openModes(); return; } if (m === 'proyekto' && !job) openMap(); else if (m === 'versus' && !vsPick) openVs(); else if (m === 'training' && !lesson) openLessons(); else if (m === 'tapatan') openTapatan(); else { data.mode = m; start(); } };
 $('safety-ok').onclick = () => { data.safety = true; persist(); start(); };
 $('retry').onclick = () => { if (data.mode === 'tapatan') tap = { wins: [0, 0], round: 1 }; start(); };
 $('resume').onclick = resume;
@@ -1046,7 +1309,7 @@ function frame(now) {
     ghostHud();
     inspHud(dt);
     let top = 99; for (let i = 0; i < game.board.length; i++) if (game.board[i]) { top = Math.floor(i / 10); break; }
-    highCool -= dt; if (top < 7 && game.phase === 'play' && highCool <= 0) { highCool = 9; say(top < 5 ? 'brink' : 'high', top < 5); }
+    highCool -= dt; if (top < 7 && game.phase === 'play' && highCool <= 0) { highCool = 9; if (top < 5) { speak('neardeath'); feel({ type: 'lindol' }); } else say('high'); }
   } else if (viewer && mode === 'replay') {
     // the replay viewer: whole ticks at 1×, 2× or 4×
     const V = viewer, vs = !!V.pb.rec.head.vs;
@@ -1070,10 +1333,10 @@ function frame(now) {
   }
   const g = game || vgame() || demo;
   const rivalG = match ? match.b : viewer && viewer.pb.rec.head.vs ? viewer.pb.g.b : null;
-  const vmode = mode === 'play' || mode === 'replay' ? 'play' : mode === 'pause' ? 'pause' : mode === 'results' ? 'results' : mode === 'safety' ? 'safety' : 'title';
+  const vmode = mode === 'play' || mode === 'replay' ? 'play' : mode === 'pause' ? 'pause' : mode === 'results' ? 'results' : mode === 'safety' ? 'safety' : mode === 'shop' ? 'shop' : 'title';
   const nextN = viewer ? (viewer.pb.rec.head.opts?.next || 5) : data.rules.next;
   if (view) {
-    view.frame(g, dt, { mode: vmode, reduced: reduced(), cine: data.opt.cine && !match && !lesson && !viewer, ghost: data.opt.ghost, rival: rivalG, p2: !!(match && match.local), hint: lessonHint(), plumb: plumbHint(), next: nextN, onThunder: () => A.thunder(), onCeremony: (n) => { big('BAHAY NA!', `${n} palapag · Salamat, bayanihan!`, 2.4); say('ceremony', true); A.event({ type: 'ceremony' }); } });
+    view.frame(g, dt, { mode: vmode, reduced: reduced(), cine: data.opt.cine && !match && !lesson && !viewer, ghost: data.opt.ghost, rival: rivalG, p2: !!(match && match.local), shopTab, hint: lessonHint(), plumb: plumbHint(), next: nextN, onThunder: () => A.thunder(), onCeremony: (n) => { big('BAHAY NA!', `${n} palapag · Salamat, bayanihan!`, 2.4); say('ceremony', true); A.event({ type: 'ceremony' }); if (game) recordHouse(game, n); } });
     // the rival's bubble over its scaffold
     rbubbleT -= dt; rsayCool -= dt;
     const rb = $('rbubble'), rp = view.rivalHead(), ron = rbubbleT > 0 && (mode === 'play' || mode === 'results') && rp.on && !!match;
@@ -1098,6 +1361,7 @@ async function boot() {
     const { createView } = await import('./view3d.mjs');
     view = createView($('view'), { low: touch, gfx: Q.get('gfx') ?? (data.gfx === 'auto' ? null : String(data.gfx)) });
     view.setAngled(data.opt.angle);
+    wearLooks();
     if (data.style !== 'apartment') view.setHouseStyle(data.style);
     window.addEventListener('resize', () => view.resize());
     new ResizeObserver(() => view.resize()).observe($('view'));
@@ -1111,7 +1375,10 @@ async function boot() {
     new ResizeObserver(() => R.resize()).observe($('board'));
     R.resize();
   }
+  streakDay(); labels();
   show('title');
+  if (online.user && !TEST) sync();
+  try { if (sessionStorage.getItem('hollowblocks.restored')) { sessionStorage.removeItem('hollowblocks.restored'); setTimeout(() => toast(`Naibalik ang progreso ni ${online.user} · Progress restored`, 3200), 900); } } catch { /* no session storage */ }
   requestAnimationFrame((n) => { last = n; requestAnimationFrame(frame); });
   setTimeout(() => $('curtain').classList.add('off'), 250);
   if (view) {
@@ -1134,7 +1401,7 @@ async function boot() {
     const fastTap = (n) => { for (let k = 0; k < n; k++) { if (!match || mode !== 'play' || match.phase !== 'play') break; onMatch(matchStep(match, bot(match.a, { pace: 4 }), 1 / 60, null, bot(match.b, { pace: 6, style: 'tetris' }))); if (view && k % 20 === 19) view.frame(game, 1 / 3, { mode: 'play', reduced: reduced(), cine: false, ghost: true, rival: match.b, p2: true, next: data.rules.next }); } return match && match.tick; };
     // the same for a match: the bot plays your well too
     const fastVs = (n) => { for (let k = 0; k < n; k++) { if (!match || mode !== 'play' || match.phase !== 'play') break; const out = matchStep(match, bot(match.a, { pace: 4 }), 1 / 60, (inp) => { if (rec) record(rec, inp); }); onMatch(out); if (view && k % 20 === 19) view.frame(game, 1 / 3, { mode: 'play', reduced: reduced(), cine: false, ghost: true, rival: match.b, next: data.rules.next }); } return match && match.tick; };
-    window.__hb = { job: (id) => openBrief(contractById(id)), fastTap, openTapatan, get tap() { return tap; }, tapIn, openMap, weeklyBanner, inspSays, fast, fastVs, A, get game() { return game; }, get match() { return match; }, get mode() { return mode; }, get demo() { return demo; }, get viewer() { return viewer; }, get coach() { return coach; }, get ghost() { return ghost; }, replays, start, get view() { return view; }, pause, resume, openSettings: () => openSettings(mode === 'pause' ? 'pause' : 'title'), openKeys, openVs, openRival, openLessons, openLesson: (id) => openLesson(lessonById(id)), openReplays, watch, encodeLast: async () => rec && encode(rec), keepReplay: () => keepReplay(game, true), data, showFinesse, setRec: (r) => { rec = r; } };
+    window.__hb = { online, openAccount, openRanking, openModes, openShop, openBook, openHouse, get houses() { return houses; }, recordHouse, labels, V, wearLooks, job: (id) => openBrief(contractById(id)), fastTap, openTapatan, get tap() { return tap; }, tapIn, openMap, weeklyBanner, inspSays, fast, fastVs, A, get game() { return game; }, get match() { return match; }, get mode() { return mode; }, get demo() { return demo; }, get viewer() { return viewer; }, get coach() { return coach; }, get ghost() { return ghost; }, replays, start, get view() { return view; }, pause, resume, openSettings: () => openSettings(mode === 'pause' ? 'pause' : 'title'), openKeys, openVs, openRival, openLessons, openLesson: (id) => openLesson(lessonById(id)), openReplays, watch, encodeLast: async () => rec && encode(rec), keepReplay: () => keepReplay(game, true), data, showFinesse, setRec: (r) => { rec = r; } };
     if (Q.get('rival')) { vsPick = Q.get('rival'); }
     if (Q.get('lesson')) lesson = lessonById(Q.get('lesson'));
     if (Q.get('difficulty')) data.difficulty = Q.get('difficulty');

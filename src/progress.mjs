@@ -88,3 +88,21 @@ export function weeklyEvent(now = Date.now()) {
   return { ...ev, week: isoWeek(now), ends, left: ends - now, next: EVENTS[(((n + 1) % EVENTS.length) + EVENTS.length) % EVENTS.length] };
 }
 export function countdown(ms) { const s = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60); return d ? `${d}a ${h}o` : h ? `${h}o ${m}m` : `${m}m ${s % 60}s`; }
+
+// ---------- the daily login streak: a day more each day you come back (Manila dates), one grace day
+// that covers a single missed day, and a bonus that grows to the seventh day ----------
+export const STREAK_CAP = 7;
+export const streakBonus = (n) => { const d = Math.max(1, Math.min(STREAK_CAP, n)); return { xp: 25 * d, coins: 10 * d }; };
+const dayNum = (key) => Math.round(Date.parse(`${key}T00:00:00Z`) / 86400e3);
+// st: { count, best, last (a date key), grace (used in this run) } → { st, bonus, graced }
+export function touchStreak(st, now = Date.now()) {
+  const s = { count: 0, best: 0, last: null, grace: false, ...(st || {}) }, today = dateKey(now);
+  if (s.last && dayNum(today) - dayNum(s.last) <= 0) return { st: s, bonus: null, graced: false }; // already counted today (or the clock went back)
+  const gap = s.last ? dayNum(today) - dayNum(s.last) : null;
+  let graced = false;
+  if (gap === 1) s.count++;
+  else if (gap === 2 && !s.grace) { s.count++; s.grace = true; graced = true; }
+  else { s.count = 1; s.grace = false; }
+  s.last = today; s.best = Math.max(s.best, s.count);
+  return { st: s, bonus: streakBonus(s.count), graced };
+}

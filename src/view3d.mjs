@@ -20,12 +20,21 @@
 import * as THREE from './vendor/three.module.min.js';
 import { COLS, ROWS, HIDDEN, CLEAR_T, READY, cellsOf, ghostOf } from './game.mjs';
 import { SHAPES } from './pieces.mjs';
-import { CS, KEYS, TYPE_KEY, FEEL, makeMaterials, blockGeometry, ghostTexture, GHOST_COLORS } from './blocks.mjs';
+import { CS, KEYS, TYPE_KEY, FEEL, makeMaterials, blockGeometry, ghostTexture, GHOST_COLORS, skinMaterials } from './blocks.mjs';
+import { buildTheme, THEMES } from './themes.mjs';
 import { buildSite, WELL, BASE_Y } from './site.mjs';
 import { createFx } from './fx.mjs';
 import { createPost } from './post.mjs';
 import { mergeGeometries } from './vendor/three-extra.min.js';
 import { person, posePerson, kapatasLook, parade as makeParade } from './folk.mjs';
+// Kapatas's outfits (the shop): his crafted figure dressed differently; the motion-captured one only wears the default
+const OUTFITS = {
+  'fit-kapatas': kapatasLook,
+  'fit-barong': { ...kapatasLook, shirt: '#f2ead2', vest: null, pants: '#1e1e26', towel: false },
+  'fit-jersey': { ...kapatasLook, shirt: '#e8384f', vest: null, pants: '#f4f4f4' },
+  'fit-kapote': { ...kapatasLook, shirt: '#ffd23f', vest: '#ffd23f', pants: '#2a5ab8', hat: '#2a5ab8', towel: false },
+  'fit-santa': { ...kapatasLook, shirt: '#d8222a', vest: null, pants: '#d8222a', hat: null, santa: true, beard: true, towel: false, shoes: '#111111' },
+};
 import { dress } from './envpack.mjs';
 import { foremanModel, driveForeman, foremanEvent } from './foreman.mjs';
 import { buildCrowd } from './crowd.mjs';
@@ -246,6 +255,12 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     results: (t) => { const h = site.house.group.position, top = Math.max(6, site.house.top()), wide = camera.aspect > 1.2; return { pos: [h.x + 3 + Math.sin(t * 0.1) * 0.6, top * 0.42 + 1.2, h.z + 21 + top * 0.7], look: [h.x - (wide ? 5.5 : 0.5), top * 0.52, h.z], fov: wide ? 44 : 56 }; },
     bayanihan: (k) => ({ pos: [lerp(-8.6, -6.8, k), 1.35, 13.6], look: [lerp(-2.6, -0.4, k), 3.35, 2.6], fov: 46 }),
     house: (k) => ({ pos: [lerp(8.6, 10.2, k), 4.2 + k * 1.6, 13.5], look: [site.house.group.position.x - 0.5, site.house.top() + 0.5, site.house.group.position.z], fov: 38 }),
+    // the shop: what's being tried on, framed in the half of the screen the panel leaves free
+    shop: (tab) => {
+      if (tab === 'outfit') return compact ? { pos: [kap.x + 0.6, 1.5, kap.z + 4.6], look: [kap.x + 0.2, 0.55, kap.z], fov: 40 } : { pos: [kap.x + 2.2, 1.7, kap.z + 5.2], look: [kap.x - 1.0, 1.2, kap.z], fov: 34 };
+      if (tab === 'theme') return compact ? { pos: [4, 9, 30], look: [0, 1.5, -25], fov: 54 } : { pos: [10, 9, 30], look: [-10, 6, -25], fov: 46 };
+      return compact ? { pos: [0, 4.6, 15], look: [0, 2.3, 0], fov: 46 } : { pos: [0.8, 5.0, 14], look: [-3.0, 4.2, 0], fov: 40 };
+    },
     pause: () => ({ pos: [play.pos.x - 2.5, play.pos.y - 1.2, play.pos.z - 4], look: [play.look.x - 0.4, play.look.y - 0.5, 0], fov: play.fov }),
   };
   const tv = new THREE.Vector3(), tl = new THREE.Vector3();
@@ -506,6 +521,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     const [ta, tb, tk] = todFor(g, o.mode);
     applyTod(ta, tb, tk, o.snapTod ? 1 : dt);
     stormOn = ta === 'storm'; hazeOn = ta === 'noon';
+    if (themeDef && themeDef.fog) { scene.fog.color.lerp(cTheme.set(themeDef.fog), themeDef.k); renderer.toneMappingExposure *= themeDef.exp || 1; }
     fx.setRain(stormOn, post.level >= 1 ? 1100 : 500);
     if (stormOn && !reduced) { nextBolt -= dt; if (nextBolt <= 0) { lightning = 1; nextBolt = rnd(5, 12); if (o.onThunder) o.onThunder(); } }
     lightning = Math.max(0, lightning - dt * 3.2);
@@ -521,7 +537,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     dangerK = lerp(dangerK, danger ? 1 : 0, Math.min(1, dt * 4));
     const kState = kap.react === 'victory' || kap.react === 'cheer' ? 'cheer' : kap.react === 'slump' ? 'slump' : kap.react === 'point' ? 'point' : danger || kap.react === 'worry' ? 'worry' : 'idle';
     const lookYaw = Math.atan2(tgt.x - kap.x, 4) * 0.8 - 0.4, lookP = -Math.atan2(tgt.y - 1.7, 4) * 0.5;
-    if (kap.real) {
+    if (kap.real && kap.useReal !== false) {
       kap.crafted.root.visible = false;
       driveForeman(kap.real, dt, { state: kState, x: kap.x, z: kap.z, yaw: kap.yaw, look: [tgt.x, tgt.y, 0], reduced });
     } else {
@@ -712,6 +728,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       else { const a = shots.establish(), q = ease(clamp(k / 0.85, 0, 1)); target = { pos: a.pos.map((v, i) => lerp(v, play.pos.getComponent(i), q)), look: a.look.map((v, i) => lerp(v, play.look.getComponent(i), q)), fov: lerp(a.fov, play.fov, q) }; rate = 1; }
     } else if (o.mode === 'play' || o.mode === 'safety') { target = asShot(play); rate = cam.mode === 'play' ? 1 : 4; }
     else if (o.mode === 'pause') { target = shots.pause(); rate = 2.5; }
+    else if (o.mode === 'shop') { target = shots.shop(o.shopTab); rate = 2.2; }
     else if (o.mode === 'results') {
       target = shots.results(t); rate = 1.6;
       if (cam.mode !== 'results') fx.clear();
@@ -732,6 +749,9 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     let hole = null;
     if (hazeOn) { const a = vp.set(WELL.x0 - 0.3, WELL.y0 - 0.3, 0.3).project(camera), b = vs.set(WELL.x1 + 0.3, WELL.top + 0.3, 0.3).project(camera); hole = [(a.x + 1) / 2, (a.y + 1) / 2, (b.x + 1) / 2, (b.y + 1) / 2]; }
     post.render(dt, { flash: reduced ? 0 : Math.max(flashK, lightning * 0.35), bloomBoost: flashK * 1.5 + lightning, haze: hazeOn && post.level >= 1 ? 1 : 0, hole });
+    // a picture of this frame, for the collection book (taken right after drawing, while it's there)
+    if (snapWant.length) { const list = snapWant.splice(0); for (const { w, h, resolve, shot } of list) { try {
+      if (shot === 'house') { const sh = shots.results(0); camera.position.set(...sh.pos); camera.lookAt(...sh.look); camera.fov = sh.fov; camera.updateProjectionMatrix(); post.render(0, { flash: 0, bloomBoost: 0, haze: 0, hole: null }); } const c = document.createElement('canvas'); c.width = w; c.height = h; const src = renderer.domElement, sa = src.width / src.height, da = w / h, sw = sa > da ? src.height * da : src.width, sh = sa > da ? src.height : src.width / da; c.getContext('2d').drawImage(src, (src.width - sw) / 2, (src.height - sh) / 2, sw, sh, 0, 0, w, h); resolve(c.toDataURL('image/jpeg', 0.78)); } catch { resolve(null); } } }
   }
   const fmt = (ticks) => { const s = Math.floor(ticks / 60); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
@@ -741,6 +761,30 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   const inspHead = () => (insp && insp.on ? screenOf(...insp.head()) : { x: 0, y: 0, on: false });
   const rivalHead = () => (rig && vsOn ? screenOf(rig.RX, rig.LIFT + (WELL.top + 1.75) * rig.S, rig.Z + 0.3) : { x: 0, y: 0, on: false });
 
+  // ---------- the shop's looks: a block skin, Kapatas's outfit, the site's theme ----------
+  const snapWant = [];
+  let skinId = 'skin-klasiko', outfitId = 'fit-kapatas', themeId = 'site-barangay', themeDef = null, themeGroup = null, groundWas = null;
+  const cTheme = new THREE.Color();
+  function setSkin(id) {
+    if (id === skinId) return;
+    skinId = id; const set = skinMaterials(mats, id);
+    for (const [k, im] of Object.entries(blocks)) im.material = set[k] || mats[k];
+  }
+  function setOutfit(id) {
+    if (id === outfitId || !OUTFITS[id]) return;
+    outfitId = id;
+    scene.remove(kap.crafted.root);
+    kap.crafted = person(OUTFITS[id]); scene.add(kap.crafted.root);
+    kap.useReal = id === 'fit-kapatas';
+    if (kap.real && kap.real.root) kap.real.root.visible = kap.useReal;
+  }
+  function setTheme(id) {
+    if (id === themeId) return;
+    themeId = id; themeDef = THEMES[id] || null;
+    if (themeGroup) { scene.remove(themeGroup); themeGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); themeGroup = null; }
+    if (themeDef && themeDef.fog) themeGroup = buildTheme(scene, id);
+    if (site.groundM) { if (groundWas === null) groundWas = site.groundM.color.getHex(); site.groundM.color.set(themeDef && themeDef.ground ? themeDef.ground : groundWas); }
+  }
   // ---------- the real things, as they load ----------
   function setEnv(env) {
     const ctx = {
@@ -760,7 +804,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   }
   function setPeople(lib) {
     foremanLib = lib;
-    try { kap.real = foremanModel(lib, scene); } catch { kap.real = null; }
+    try { kap.real = foremanModel(lib, scene); if (kap.real && kap.real.root && kap.useReal === false) kap.real.root.visible = false; } catch { kap.real = null; }
   }
 
   resize();
@@ -768,6 +812,8 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   return {
     frame, event, resize, post, renderer, scene, setEnv, setPeople, setCrowd, kapHead, screenOf, rivalEvent, attack, setVersus, rivalHead, inspHead,
     setHouseStyle(id) { site.setHouseStyle(id); },
+    setSkin, setOutfit, setTheme, get looks() { return { skin: skinId, outfit: outfitId, theme: themeId }; },
+    snapshot(w = 360, h = 220, shot = null) { return new Promise((resolve) => snapWant.push({ w, h, resolve, shot })); },
     celebrate() { fx.confetti(0, WELL.top + 1, 1.2, 220); cheerT = 4; reactKapatas('victory'); if (!reduced) flashK = 0.2; },
     get cellPx() { return cellPx; }, get cine() { return cine; }, get busy() { return fx.busy; },
     setInsets(top, bottom) { insets = { top, bottom }; fit(); }, setAngled(b) { angled = b; fit(); },

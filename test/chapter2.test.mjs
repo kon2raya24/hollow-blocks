@@ -98,3 +98,17 @@ for (const c of CONTRACTS.filter((x) => x.brgy >= 3)) {
     if (c.star.by === 'time') assert.ok(play(c, 1, 24) < 3, `${c.id}: three stars at a slow pace`);
   });
 }
+
+test('Lunes: the kreyn never hands over a kawayan, and none is banked there', () => {
+  const g = createGame({ seed: 8, mode: 'proyekto', contract: { goal: { lines: 99 }, noI: true, tools: true, toolEvery: 1 } });
+  for (let k = 0; k < READY; k++) tick(g);
+  const banked = [];
+  for (let k = 0; k < 80 && g.phase === 'play'; k++) { g.board.fill(0); const ev = tick(g, { pressed: ['hard'], held: [] }); for (const e of ev) if (e.type === 'toolEarned') banked.push(e.tool); g.tools.length = 0; }
+  assert.ok(banked.length > 30 && !banked.includes('kreyn'), banked.join());
+  const h = createGame({ seed: 8, mode: 'proyekto', contract: { goal: { lines: 99 }, noI: true, startTools: ['kreyn'] } });
+  for (let k = 0; k < READY; k++) tick(h);
+  const was = h.cur.type;
+  const ev = tick(h, { pressed: ['tool'], held: [] });
+  assert.equal(h.cur.type, was); assert.ok(!ev.some((e) => e.type === 'tool'));
+  assert.notEqual(h.cur.type, 'I');
+});

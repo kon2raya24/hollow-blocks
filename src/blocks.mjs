@@ -187,7 +187,7 @@ export const FEEL = {
 };
 
 // Instanced blocks get a per-instance glow (the piece in hand, the lock warning, a row about to go).
-function withGlow(m) {
+export function withGlow(m) {
   m.onBeforeCompile = (sh) => {
     sh.vertexShader = 'attribute float aGlow;\nvarying float vGlow;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vGlow = aGlow;');
     sh.fragmentShader = 'varying float vGlow;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * min(vGlow, 1.0) * 0.9 + vec3(1.0, 0.86, 0.6) * max(vGlow - 1.0, 0.0);');
@@ -238,3 +238,38 @@ export function ghostTexture() {
   return toTex(c);
 }
 export const GHOST_COLORS = { I: '#d9e86a', O: '#e4ecf0', T: '#ff7a5a', S: '#7fe0f4', Z: '#ffd79a', J: '#6f9cff', L: '#ffa24a' };
+
+// ---------- block skins (the shop): each piece keeps its own hue and its pattern's relief, so the
+// materials stay readable whatever the finish ----------
+const HUE = { kawayan: '#c8d84a', kawayanV: '#c8d84a', hollow: '#c8d0d8', ladrilyo: '#e8583a', yero: '#5ac8e0', plywood: '#f0b860', baldosa: '#4a7fff', adobe: '#ff9a3a' };
+const XMAS = { kawayan: '#2ac84a', kawayanV: '#2ac84a', hollow: '#f4f4ff', ladrilyo: '#ff2a2a', yero: '#2ad8ff', plywood: '#ffd23f', baldosa: '#3a6aff', adobe: '#ff7a1a' };
+function edgeTex() { // neon: a bright rim and a dark middle
+  const c = canvas(128, 128), x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, 128, 128);
+  for (let k = 0; k < 10; k++) { x.strokeStyle = `rgba(255,255,255,${0.12 + k * 0.09})`; x.lineWidth = 2; x.strokeRect(2 + (9 - k), 2 + (9 - k), 124 - (9 - k) * 2, 124 - (9 - k) * 2); }
+  x.strokeStyle = 'rgba(255,255,255,0.35)'; x.lineWidth = 2; x.beginPath(); x.moveTo(30, 64); x.lineTo(98, 64); x.stroke();
+  return toTex(c);
+}
+function starTex() { // parol: a five-pointed star with rays, lit from within
+  const c = canvas(128, 128), x = c.getContext('2d'), g = x.createRadialGradient(64, 64, 4, 64, 64, 70); g.addColorStop(0, '#fff'); g.addColorStop(0.5, '#888'); g.addColorStop(1, '#222'); x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+  x.strokeStyle = 'rgba(255,255,255,0.5)'; x.lineWidth = 3; for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; x.beginPath(); x.moveTo(64, 64); x.lineTo(64 + Math.cos(a) * 64, 64 + Math.sin(a) * 64); x.stroke(); }
+  x.fillStyle = '#fff'; x.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + (k / 10) * Math.PI * 2, r = k % 2 ? 16 : 40; x.lineTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r); } x.closePath(); x.fill();
+  return toTex(c);
+}
+let EDGE = null, STAR = null;
+export function skinMaterials(base, id) {
+  if (!id || id === 'skin-klasiko') return base;
+  EDGE = EDGE || edgeTex(); STAR = STAR || starTex();
+  const out = {};
+  for (const [k, m] of Object.entries(base)) {
+    const hue = new THREE.Color(HUE[k] || '#b8b0a0'), keep = !HUE[k]; // mud, semento and the stamp stay themselves, mostly
+    const P = (o) => withGlow(new THREE.MeshPhysicalMaterial({ map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, roughness: 1, ...o }));
+    if (id === 'skin-glazed') out[k] = P({ color: new THREE.Color('#ffffff').lerp(hue, keep ? 0 : 0.25), roughness: 0.14, roughnessMap: null, clearcoat: 1, clearcoatRoughness: 0.04, envMapIntensity: 1.6 });
+    else if (id === 'skin-capiz') out[k] = P({ color: new THREE.Color('#e8e0d2').lerp(hue, keep ? 0.05 : 0.38), roughness: 0.3, roughnessMap: null, iridescence: 0.8, iridescenceIOR: 1.4, iridescenceThicknessRange: [200, 480], sheen: 0.25, sheenColor: hue, envMapIntensity: 1.0 }); // pearly over the material's own pattern
+    else if (id === 'skin-neon') out[k] = P({ color: '#1a1a24', map: null, roughness: 0.35, roughnessMap: null, metalness: 0.4, emissive: keep ? new THREE.Color('#5a3a2a') : hue.clone().multiplyScalar(1.3), emissiveMap: EDGE, emissiveIntensity: keep ? 0.4 : 1.6 });
+    else if (id === 'skin-parol') { const c = new THREE.Color(XMAS[k] || '#c8a080'); out[k] = P({ color: c.clone().lerp(new THREE.Color('#ffffff'), 0.5), map: null, roughness: 0.5, roughnessMap: null, emissive: c, emissiveMap: STAR, emissiveIntensity: keep ? 0.2 : 1.1, sheen: 0.4, sheenColor: c }); }
+    else if (id === 'skin-pintado') out[k] = P({ color: keep ? new THREE.Color('#c8b8a8') : hue.clone().lerp(new THREE.Color('#ffffff'), 0.45), map: null, roughness: 0.85, roughnessMap: null });
+    else if (id === 'skin-ginto') out[k] = P({ color: new THREE.Color('#ffd27a').lerp(hue, keep ? 0 : 0.28), map: null, roughness: 0.24, roughnessMap: null, metalness: 1, envMapIntensity: 1.5 });
+    else out[k] = m;
+  }
+  return out;
+}

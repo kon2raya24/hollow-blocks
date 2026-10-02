@@ -38,6 +38,37 @@
 - **Proyekto, Kabanata 2 (Sa Lungsod):** fifteen more contracts in Sta. Lucia, Maligaya and Bagumbayan, opened by finishing Ang Huling Bahay or by 30 stars. The new twists: **Brownout** (the well goes dark but for a flashlight cone on the piece, with the lights coming back now and then), **Hangin** (the piece drifts a column with the wind, and the gust turns), **Bitak** (every few pieces is cracked and crumbles a few placements later), **Lunes** (no kawayan at all), and **limited tools** (only the tools the contract hands you). The finale is the **City Inspector**: he walks in from the street, paces beside the well with his clipboard, stamps a REJECTED block on top of a column every few seconds, mud rises on a timer, and his inspection bar fills; finish three floors before it does. Clearing a stamp pushes his bar back three seconds.
 - **Proyekto:** fifteen contracts across three barangays (San Roque, Malinta, Bagong Silang), each a job order from Kapatas with a goal and a twist: clear rows with only two holds, reach a floor against the clock, make T-spins, outlast the mud, clear a messy foundation in few pieces, earn ₱6,000 while a **lindol** (earthquake) slides the stack sideways every 30 seconds. Finishing earns a star, beating the par two or three; each contract opens the next, and 8 stars open the next barangay.
 
+## The site office (the title)
+
+The title is a hub: a big **Trabaho na!** button plays the mode you played last, and the tiles open **Mga Laro** (a card for every mode, with a line about it and your best, and the difficulty), Pagsasanay, the Tindahan, the Koleksyon, Replays, your Tala, Settings and How to. The week's event has its own banner, and your streak, barya, tokens and rank sit in chips under the logo.
+
+## Tindahan (the shop) and the locker
+
+Every game pays **barya** (coins) for its lines, kita, Bayanihans, T-spins and finishing; the weekly event pays **tokens**. Spend them on looks, each previewed live on the site behind the shop before you buy, then equipped with a tap:
+- **Block skins:** Makintab (glazed tiles), Capiz (pearly, iridescent), Neon sa Gabi (dark blocks with glowing edges), Parol (each block a lit Christmas lantern), Pintado (pastel, opened by the Malinis medal) and Ginto (solid gold, for Arkitekto). Each keeps every piece's own hue and its pattern's relief, so the materials stay readable.
+- **Kapatas's outfits:** a barong, a liga jersey, a yellow raincoat (opened by the Matibay sa Bagyo medal) and Santa. (With an outfit on, Kapatas is his made-in-code self; the motion-captured one wears the work clothes.)
+- **Site themes:** Makati (glass towers over the street), a beach resort (a hotel, palms, umbrellas and the sea) and the province (rice paddies, kubo, mountains; opened at the Kapatas rank). Each sets its own air around the same well.
+
+## Mga Naitayong Bahay (the collection book)
+
+Every house you finish in Bahay (each five floors) goes in the book with its style, floors and date, and a picture of it taken from the site as it's finished. Open one for its card (kita, rows, time, the skin and site you built it with) and share it as an image (Web Share where there is one, otherwise a PNG download).
+
+## The streak, the music, the feel, the voice
+
+- **Streak:** come back each day (Manila dates) for a little XP and barya, growing to the seventh day; one missed day is covered by a grace day once per streak. A flame on the title shows the count.
+- **Music:** layers build with the game: a tension layer (a pulsing low ostinato and a high tremolo, through a filter that opens) rises with the stack, a rhythm layer (shaker and claps) comes in while a combo runs, and a Bayanihan gets a brass stinger. They crossfade, all on the music bus under the effects and through the limiter.
+- **Haptics:** phones buzz and controllers rumble on hard drops, clears, a Bayanihan, the tools and a top-out, scaled by size; a setting turns it off.
+- **Kapatas's voice:** a line for each moment, in these slots. Drop recordings in `assets/voice/` and they play; until then the browser speaks the line with a Filipino (fil-PH or tl) voice if it has one, otherwise a short babble goes with his speech bubble. Voice volume and on/off are in Settings.
+
+  | file | when |
+  |---|---|
+  | `assets/voice/bayanihan.mp3` | four rows at once |
+  | `assets/voice/tspin.mp3` | a T-spin |
+  | `assets/voice/rankup.mp3` | a new rank |
+  | `assets/voice/neardeath.mp3` | the stack about to topple |
+  | `assets/voice/win.mp3` | a job done |
+  | `assets/voice/lose.mp3` | the wall coming down |
+
 ## Replays and the ghost
 
 Every game is recorded as its seed and setup plus the input of each tick, stored as changes only and packed into a few kilobytes. Your best Deadline and Karera runs (per difficulty), your best Daily, and your last game are kept on the device. In Deadline and Karera, **Habulin ang multo** races your best run: a bar under the score shows you and the ghost, and how far ahead or behind you are. The replay viewer plays a run back at 1×, 2× or 4×, with pause; **Link** copies a URL whose hash is the replay (deflated and base64url), and opening that link plays it.
@@ -66,6 +97,12 @@ Tools are off in Deadline, Bagyo and the Daily, so those results stay comparable
 
 Every game earns XP, and the ranks run **Peon, Mason, Kapatas, Inhinyero, Arkitekto**; a rank-up is a small ceremony and unlocks a style for the house next door (apartment, bahay kubo, bahay na bato, condo tower), picked on the stats page. There are twelve medals (a first Bayanihan, a T-spin triple, a 10-combo, a perfect clear, all the stars in a barangay…) and a page of totals. Everything is kept on your device; older saves carry over.
 
+## Account and Ranking
+
+Make an **account** (a name and a password, no email) and your progress is saved on the server too: XP and rank, barya and tokens, medals, stars, what you bought. If the browser's data is cleared, or you play on another device, log in and it all comes back. When two copies differ, the one with more XP wins, since XP only grows.
+
+**Ranking** has a board for Bahay, Karera, Bagyo and Deadline at each difficulty, today's Daily and this week's Lingguhan. A finished game is sent as its replay, and the server plays it through the same rules to get the score (or the 40-line time), so a board only ever holds games that really happened. Each player's best game on a board can be watched from it.
+
 **Difficulty:**
 - **Madali:** slower falls and a longer grace period before a piece sticks.
 - **Katamtaman:** the classic.
@@ -82,6 +119,8 @@ python3 -m http.server 8000
 ```
 
 Tests (Node 20+): `node --test test/*.test.mjs`.
+
+Accounts and Ranking need the server: `api/hb.mjs` is a Vercel function over Upstash Redis (the `KV_REST_API_URL` and `KV_REST_API_TOKEN` variables). A plain static server plays everything else, and its Account and Ranking screens use the live server.
 - **The rules:**
   - the shapes and the bag
   - spawning, shifting with auto-repeat, and wall kicks
@@ -98,11 +137,15 @@ Tests (Node 20+): `node --test test/*.test.mjs`.
   - the rank tools, and a game with the old toolset playing exactly as before (`test/tools2.test.mjs`)
   - Tapatan: keys routed to each player, each player's input reaching only their well, the handicaps, and a whole match replaying from both inputs (`test/tapatan.test.mjs`)
   - every module parses (`test/syntax.test.mjs`)
+  - the shop's catalogue, buying, equipping and unlocks, the barya a game pays, the streak across days, time zones, gaps and the grace day, the haptics scaling, the voice's choice of source, and the music's layers (`test/phase3.test.mjs`); the kreyn never gives a kawayan on a Lunes (`test/chapter2.test.mjs`)
+  - the server: accounts, slowing down password guesses, the cloud save that never lets an older copy win, which board a game belongs on, scores read from the replay and never from the request, and Deadline's fastest-first board (`test/server.test.mjs`)
   - rule options: no options plays exactly as before; DAS, ARR, soft drop, hold off, the queue length, and the 180° turn with its kicks (`test/options.test.mjs`)
 - **The offline cache:** every module, three.js and the sounds are precached.
 - **Sanity floors:** from a bot (`src/bot.mjs`) that scores every placement with the classic El-Tetris weights. For versus it also finds T-spins (soft drop, then a last turn into a three-corner slot) and, in the T-spinner style, keeps T-slots open; the rivals are this bot, paced and given a mistake rate (`src/versus.mjs`).
 
 **How v6 is built:** the rules stay pure. `src/versus.mjs` steps two games in lockstep and moves the mud; `src/replay.mjs` records, packs and plays back; `src/training.mjs` holds the lessons, a path finder for their solutions, and the finesse table (the fewest taps, holds and turns to each column and turn on an open board); `src/rival3d.mjs` builds the rival's scaffold, deck and mud sacks.
+
+**v8:** `src/shop.mjs` (the catalogue and the economy), `src/themes.mjs` (the site themes), `src/haptics.mjs`, `src/voice.mjs`; block skins are `skinMaterials` in `src/blocks.mjs`, and the house pictures are the view's `snapshot()`.
 
 **v7:** chapter 2's twists, the Inspector, the weekly rulesets and the rank tools are all in the pure rules (`src/game.mjs`; events and toolsets in `src/progress.mjs`). `src/controls.mjs` routes keys to players. `src/inspector3d.mjs` is the Inspector, made in code like the neighbours. The view draws the brownout as a dark pane with a soft hole and a light cone, cracks as decals, and player 2's hold and next on a board beside their scaffold. In the wind the bot steers to its target instead of replaying keys, which is what sets chapter 2's pars.
 

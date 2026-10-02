@@ -242,7 +242,77 @@ body.touch [data-mode="tapatan"] { display: none; }
 #map-note .modes { display: inline-flex; margin-bottom: 6px; }
 body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bottom: 60px; left: 50%; transform: translateX(-50%); }
 @media (max-height: 780px) { #title .mats { display: none; } #title { gap: 7px; } }
+/* v8: the title hub, the mode cards, the shop, the collection book */
+#title { gap: 12px; }
+#title .logo { font-size: clamp(54px, 10vw, 112px); }
+.hubchips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.hchip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px 3px; background: linear-gradient(180deg, rgba(34,24,42,.9), rgba(14,10,18,.9)); border: 2px solid rgba(216,201,160,.6); box-shadow: 0 0 0 2px var(--dark); clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); font: italic 800 14px/1 "Barlow Condensed", sans-serif; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.hchip b { color: var(--gold); font-size: 17px; } .hchip:empty { display: none; } #streak.hot { border-color: #ff8a3a; box-shadow: 0 0 0 2px var(--dark), 0 0 16px rgba(255,120,40,.6); }
+.playbig { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; width: min(560px, 92vw); padding: 12px 22px; text-align: left; transform: skewX(-8deg); background: linear-gradient(180deg, #fff0a0, #ffd23f 45%, #e89a1c); color: #2a1a0a; border-color: #fff4c8; text-transform: none; letter-spacing: 0; }
+.playbig > * { transform: skewX(8deg); } .playbig .pb-ico .ico { width: 58px; height: 58px; }
+.playbig b { display: block; font: italic 900 38px/.95 "Barlow Condensed", sans-serif; text-transform: uppercase; letter-spacing: .02em; }
+.playbig #play-mode { display: block; font: italic 800 17px/1.1 "Barlow Condensed", sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #5a3010; }
+.playbig em { display: block; font: 700 13px/1.2 "Baloo 2", sans-serif; font-style: normal; color: #6a4018; } .playbig em:empty { display: none; }
+.pb-go { font: italic 900 22px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; background: #2a1a0a; color: #ffd23f; padding: 8px 14px; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+@media (max-width: 760px) { body:not(.on-title) .help { display: none; } }
+.hubtiles { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; width: min(1000px, 94vw); }
+.tile { display: grid; justify-items: center; gap: 4px; padding: 10px 4px 8px; transform: none; min-height: 0; font-size: 14px; letter-spacing: .04em; }
+.tile .ico { width: 34px; height: 34px; } .tile span { white-space: nowrap; }
+.corner-sound { position: absolute; top: max(12px, env(safe-area-inset-top)); right: 12px; transform: none; }
+#weekly { width: min(640px, 94vw); }
+@media (max-width: 760px) { .hubtiles { grid-template-columns: repeat(5, 1fr); } .tile { font-size: 12px; padding: 8px 2px 6px; } .tile .ico { width: 28px; height: 28px; } .playbig b { font-size: 30px; } .playbig .pb-ico .ico { width: 44px; height: 44px; } .pb-go { display: none; } .playbig { grid-template-columns: auto 1fr; } }
+@media (max-height: 780px) and (min-width: 761px) { #title { gap: 9px; padding-top: 12px; } #title .logo { font-size: clamp(50px, 8.4vw, 96px); } #title .logo small { margin-top: 10px; } }
+.mgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; width: min(1100px, 96vw); }
+@media (max-width: 1000px) { .mgrid { grid-template-columns: repeat(3, 1fr); } } @media (max-width: 600px) { .mgrid { grid-template-columns: repeat(2, 1fr); gap: 8px; } }
+.mcard { display: grid; justify-items: start; align-content: start; gap: 3px; transform: none; padding: 12px 12px 10px; text-align: left; text-transform: none; letter-spacing: 0; min-height: 132px; position: relative; overflow: hidden; }
+.mcard .ico { width: 42px; height: 42px; } .mcard b { font: italic 900 22px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; letter-spacing: .03em; }
+.mcard small { font: 600 12.5px/1.25 "Baloo 2", sans-serif; color: var(--muted); } .mcard em { font: italic 800 13px/1 "Barlow Condensed", sans-serif; font-style: normal; letter-spacing: .06em; color: var(--gold); text-transform: uppercase; margin-top: auto; }
+.mcard[aria-pressed=true] { border-color: var(--gold); box-shadow: 0 0 0 2px var(--dark), 0 0 18px rgba(255,200,60,.45); }
+.mcard .tagx { position: absolute; top: 8px; right: 8px; font: italic 900 11px/1 "Barlow Condensed", sans-serif; letter-spacing: .12em; padding: 3px 7px; background: #e8402a; color: #fff; }
+@media (max-width: 600px) { .mcard { min-height: 112px; padding: 9px; } .mcard b { font-size: 18px; } .mcard small { font-size: 11.5px; } .mcard .ico { width: 32px; height: 32px; } }
+#shop { align-items: flex-start; justify-content: flex-start; background: linear-gradient(90deg, rgba(14,10,18,.82), rgba(14,10,18,.5) 46%, transparent 62%); }
+.shopcard { width: min(560px, 96vw); max-width: none; text-align: left; display: grid; gap: 8px; max-height: calc(100vh - 70px); overflow-y: auto; }
+.shophead { display: flex; justify-content: space-between; align-items: center; gap: 10px; } .shophead h2 { font-size: 40px; }
+#shop-tabs { justify-content: flex-start; }
+.sgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.sitem { display: grid; justify-items: center; gap: 3px; transform: none; padding: 8px 6px; min-height: 0; text-transform: none; letter-spacing: 0; position: relative; }
+.sitem b { font: italic 900 15px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; } .sitem em { font: italic 800 12px/1 "Barlow Condensed", sans-serif; font-style: normal; color: var(--gold); display: inline-flex; gap: 3px; align-items: center; }
+.sitem[aria-pressed=true] { border-color: #8ef08a; } .sitem.prev { box-shadow: 0 0 0 2px var(--dark), 0 0 0 4px var(--gold); } .sitem.locked { opacity: .55; }
+.swatch { width: 54px; height: 40px; border-radius: 4px; box-shadow: inset 0 0 0 2px rgba(0,0,0,.4), 0 2px 0 rgba(0,0,0,.4); display: grid; grid-template-columns: 1fr 1fr 1fr; overflow: hidden; transform: skewX(-8deg); }
+.sdetail { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 8px 10px; background: rgba(255,255,255,.05); border-left: 3px solid var(--gold); }
+.sdetail b { font: italic 900 22px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; color: var(--gold); } .sdetail p { margin: 0; font-size: 13px; grid-column: 1; }
+.sdetail .row { grid-column: 2; grid-row: 1 / span 2; }
+@media (max-width: 600px) { #shop { background: linear-gradient(180deg, rgba(14,10,18,.6), rgba(14,10,18,.88) 40%); justify-content: flex-end; padding-bottom: 30px; } .shopcard { max-height: 64vh; } .shophead h2 { font-size: 30px; } .sgrid { grid-template-columns: repeat(3, 1fr); } }
+.bgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; width: min(1000px, 96vw); }
+.bitem { display: grid; gap: 4px; transform: none; padding: 6px; text-align: left; text-transform: none; letter-spacing: 0; min-height: 0; }
+.bitem img { width: 100%; aspect-ratio: 36 / 22; object-fit: cover; display: block; box-shadow: 0 0 0 2px var(--dark); background: #2a2030; }
+.bitem b { font: italic 900 17px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; } .bitem small { font-size: 12px; color: var(--muted); }
+.housecard { display: grid; gap: 12px 18px; width: min(860px, 94vw); max-width: none; text-align: left; } @media (min-width: 760px) { .housecard { grid-template-columns: 1.5fr 1fr; align-items: center; } }
+.housecard img { width: 100%; box-shadow: 0 0 0 3px var(--dark), 0 0 0 5px var(--gold); } .housecard h3 { margin: 4px 0 8px; font: italic 900 32px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; color: var(--gold); }
+.housecard .stats { grid-template-columns: repeat(2, auto); }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+/* online: the account and Ranking */
+.tile span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 760px) { .tile { font-size: 11px; letter-spacing: .01em; } }
+.flat .hubtiles { grid-template-columns: repeat(5, 1fr); width: min(560px, 100%); }
+#account .card { width: min(460px, 94vw); max-width: none; display: grid; gap: 10px; text-align: left; }
+.acct-form { display: grid; gap: 10px; }
+.acct-form label { display: grid; gap: 4px; font: italic 800 16px/1 "Barlow Condensed", sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--gold); }
+.acct-form small { font: 600 12px/1.2 "Baloo 2", sans-serif; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.acct-form input { font: 600 18px/1.2 "Baloo 2", system-ui, sans-serif; color: var(--ink); background: rgba(8,5,10,.75); border: 2px solid var(--line); border-radius: 3px; padding: 8px 10px; min-height: 44px; width: 100%; box-sizing: border-box; }
+.acct-form input:focus { outline: 3px solid var(--gold); outline-offset: 1px; }
+.acct-err { margin: 0; min-height: 1.2em; color: #ff9a7a; font-size: 14px; }
+.acct-who { display: flex; align-items: center; gap: 12px; margin: 0; } .acct-who span { display: grid; font-size: 14px; color: var(--muted); } .acct-who b { font: italic 900 28px/1 "Barlow Condensed", sans-serif; color: var(--gold); text-transform: uppercase; }
+#ranking .card { width: min(560px, 94vw, 100%); max-width: none; box-sizing: border-box; max-height: 56vh; overflow-y: auto; padding: 8px 10px; }
+.rk-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.rk-list li { display: grid; grid-template-columns: 2.4em 1fr auto auto; gap: 10px; align-items: center; padding: 4px 6px; border-radius: 3px; }
+.rk-list li:nth-child(-n+3) .rk-n { color: var(--gold); font-size: 22px; }
+.rk-list li.me { background: rgba(255,210,63,.18); box-shadow: inset 0 0 0 1px rgba(255,210,63,.6); }
+.rk-n { font: italic 900 18px/1 "Barlow Condensed", sans-serif; text-align: center; }
+.rk-name { text-align: left; font: 700 16px/1.2 "Baloo 2", sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-list b { font: italic 900 18px/1 "Barlow Condensed", sans-serif; color: var(--gold); }
+.rk-list button { min-height: 32px; padding: 2px 8px; }
+#rk-me b { color: var(--gold); } #results-rank button { font-size: 15px; padding: 6px 12px; }
 </style>
 </head>
 <body>
@@ -272,42 +342,56 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
 
     <section class="screen" id="title">
       <h1 class="logo">HOLLOW BLOCKS<small>Buuin ang bahay!</small></h1>
-      <p class="tag">Isalansan ang mga materyales, punuin ang mga hanay, at itayo ang bahay palapag-palapag. Apat nang sabay? BAYANIHAN!</p>
-      <div class="modes" role="group" aria-label="Mode">
-        <button type="button" data-mode="bahay">Bahay</button>
-        <button type="button" data-mode="deadline">Deadline</button>
-        <button type="button" data-mode="bagyo">Bagyo</button>
-        <button type="button" data-mode="karera">Karera</button>
-        <button type="button" data-mode="daily">Daily</button>
-        <button type="button" data-mode="proyekto">Proyekto</button>
-        <button type="button" data-mode="versus">Laban</button>
-        <button type="button" data-mode="training">Pagsasanay</button>
-        <button type="button" data-mode="tapatan">Tapatan · 2P</button>
+      <div class="hubchips"><span class="hchip" id="streak"></span><span class="hchip" id="wallet"></span><span class="hchip" id="title-rank"></span></div>
+      <button type="button" class="playbig" id="play"><span class="pb-ico" id="play-ico"></span><span class="pb-txt"><b>Trabaho na!</b><span id="play-mode">Bahay</span><em id="play-best"></em></span><span class="pb-go">Laro ▸</span></button>
+      <div class="hubtiles">
+        <button type="button" class="tile" id="modes-btn"><i data-icon="bahay"></i><span>Mga Laro</span></button>
+        <button type="button" class="tile" id="lessons-btn"><i data-icon="libro"></i><span>Pagsasanay</span></button>
+        <button type="button" class="tile" id="shop-btn"><i data-icon="tindahan"></i><span>Tindahan</span></button>
+        <button type="button" class="tile" id="book-btn"><i data-icon="larawan"></i><span>Koleksyon</span></button>
+        <button type="button" class="tile" id="replays-btn"><i data-icon="replay"></i><span>Replay</span></button>
+        <button type="button" class="tile" id="stats-btn"><i data-icon="tala"></i><span>Tala</span></button>
+        <button type="button" class="tile settings-btn"><i data-icon="gear"></i><span>Ayos</span></button>
+        <button type="button" class="tile" id="how-btn"><i data-icon="tanong"></i><span>Paano</span></button>
+        <button type="button" class="tile" id="rank-btn"><i data-icon="ranking"></i><span>Ranking</span></button>
+        <button type="button" class="tile" id="acct-btn"><i data-icon="tao"></i><span id="acct-label">Account</span></button>
       </div>
-      <p class="muted" id="mode-note"></p>
       <div id="weekly"></div>
+      <button type="button" class="sound corner-sound" aria-label="Sound"></button>
+    </section>
+
+    <section class="screen" id="modes" hidden>
+      <h2>Mga Laro</h2>
       <div class="modes" role="group" aria-label="Difficulty">
         <button type="button" data-diff="madali">Madali</button>
         <button type="button" data-diff="katamtaman">Katamtaman</button>
         <button type="button" data-diff="mahirap">Mahirap</button>
       </div>
       <p class="muted" id="diff-note"></p>
-      <div class="row">
-        <button type="button" class="primary" id="play">Trabaho na! · Play</button>
-        <button type="button" class="settings-btn">Ayos · Settings</button>
-        <button type="button" class="sound"></button>
+      <div class="mgrid" id="modes-body"></div>
+      <button type="button" class="menu">Bumalik · Back</button>
+    </section>
+
+    <section class="screen" id="shop" hidden>
+      <div class="card shopcard">
+        <div class="shophead"><h2>Tindahan</h2><span class="hchip" id="shop-wallet"></span></div>
+        <div class="modes" id="shop-tabs"></div>
+        <div class="sgrid" id="shop-body"></div>
+        <div class="sdetail" id="shop-detail"></div>
+        <div class="row"><button type="button" class="menu">Bumalik · Back</button></div>
       </div>
-      <div class="row">
-        <button type="button" id="stats-btn">Tala at Medalya · Stats</button>
-        <button type="button" id="replays-btn">Replay</button>
-        <button type="button" id="how-btn">Paano · How to</button>
-      </div>
-      <p class="muted" id="title-best"></p>
-      <p class="muted" id="title-rank"></p>
-      <ul class="mats">
-        <li style="--c:#b9c95a">Kawayan</li><li style="--c:#b3b8bd">Hollow block</li><li style="--c:#c4553a">Ladrilyo</li><li style="--c:#6fb3c4">Yero</li><li style="--c:#e6c79a">Plywood</li><li style="--c:#2f5fc4">Baldosa</li><li style="--c:#d6823a">Adobe</li>
-      </ul>
-      <p class="keys"><kbd>←</kbd><kbd>→</kbd> galaw · <kbd>↑</kbd>/<kbd>X</kbd> ikot · <kbd>Z</kbd> pabalik · <kbd>↓</kbd> dahan · <kbd>Space</kbd> bagsak · <kbd>C</kbd>/<kbd>Shift</kbd> imbak · <kbd>P</kbd> hinto · controller</p>
+    </section>
+
+    <section class="screen" id="book" hidden>
+      <h2>Mga Naitayong Bahay</h2>
+      <p class="muted" id="book-note"></p>
+      <div class="bgrid" id="book-body"></div>
+      <button type="button" class="menu">Bumalik · Back</button>
+    </section>
+
+    <section class="screen" id="house" hidden>
+      <div class="card housecard"><img id="house-img" alt="A house you built"><div><small class="muted" id="house-date"></small><h3 id="house-name"></h3><div class="stats" id="house-stats"></div></div></div>
+      <div class="row"><button type="button" class="primary" id="house-share">Ibahagi · Share image</button><button type="button" id="house-back">Bumalik · Back</button></div>
     </section>
 
     <section class="screen" id="safety" hidden>
@@ -331,6 +415,7 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
       <p class="stars" id="results-stars" hidden></p>
       <div class="score" id="results-score"></div>
       <p id="results-best"></p>
+      <p class="muted" id="results-rank" hidden></p>
       <div class="card stats" id="results-stats"></div>
       <div class="xp" id="results-xp"></div>
       <div class="medals" id="results-medals"></div>
@@ -364,6 +449,21 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
       <div class="row"><button type="button" class="primary" id="brief-go">Simulan · Start</button><button type="button" id="brief-lesson" hidden></button><button type="button" id="brief-back">Bumalik · Back</button></div>
     </section>
 
+    <section class="screen" id="account" hidden>
+      <h2>Account</h2>
+      <div class="card acct" id="account-body"></div>
+      <button type="button" class="menu">Bumalik · Back</button>
+    </section>
+
+    <section class="screen" id="ranking" hidden>
+      <h2>Ranking</h2>
+      <div class="modes" id="rk-modes" role="group" aria-label="Mode"></div>
+      <div class="modes" id="rk-diffs" role="group" aria-label="Difficulty"></div>
+      <div class="card rk" id="rk-body"></div>
+      <p class="muted" id="rk-me"></p>
+      <div class="row"><button type="button" id="rk-acct" hidden>Mag-login para makasali</button><button type="button" class="menu">Bumalik · Back</button></div>
+    </section>
+
     <section class="screen" id="stats" hidden>
       <h2>Tala at Medalya</h2>
       <div class="card" id="stats-body"></div>
@@ -383,6 +483,9 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
         <li><b>Proyekto Kabanata 2:</b> brownout (flashlight lang), hangin (dumudulas ang piraso), bitak (gumuguho ang bloke), Lunes (walang kawayan), limitadong gamit, at ang City Inspector na nagtatatak ng REJECTED. Linisin ang tatak para may dagdag na oras.</li>
         <li><b>Lingguhan:</b> bawat linggo, ibang twist (Bagyo, Lindol, Gamit Lang, Mabilis, Retro). Tapusin para sa medalya at token.</li>
         <li><b>Gamit sa ranggo:</b> <i data-icon="plumada"></i> Plumada (Kapatas): ipinapakita ang pinakamagandang puwesto ng susunod na tatlong piraso. <i data-icon="barena"></i> Barena (Inhinyero): binubutas ang isang hanay pababa. <i data-icon="andamyo"></i> Andamyo (Arkitekto): sasalo ng susunod na putik o isang pagguho.</li>
+        <li><b>Tindahan:</b> gastusin ang barya (mula sa bawat laro) at token (mula sa Lingguhan) sa mga skin ng bloke, damit ni Kapatas at tema ng site. Silipin muna bago bilhin. May mga bukas lang sa medalya o ranggo.</li>
+        <li><b>Koleksyon:</b> bawat natapos na bahay sa Bahay (bawat limang palapag) ay may larawan sa aklat. Buksan para sa detalye at ibahagi bilang larawan.</li>
+        <li><b>Streak:</b> bumalik araw-araw para sa dagdag na XP at barya, hanggang ikapitong araw. May isang palugit na araw kung makaligta ka.</li>
         <li><b>Pagsasanay:</b> mga aralin sa T-spin single, double at triple, 4-wide combo at finesse. Sundan ang gintong anino. Binibilang ng finesse coach ang sayang na pindot.</li>
         <li><b>Replay at multo:</b> naitatala ang bawat laro. Sa Deadline at Karera, hinahabol mo ang multo ng pinakamagandang takbo mo. Panoorin (1×, 2×, 4×) at ibahagi bilang link.</li>
         <li><b>Ayos:</b> bilang ng susunod na piraso, DAS, ARR, bilis ng dahan, 180° na ikot, imbak, at pagpapalit ng mga pindutan sa keyboard at controller.</li>

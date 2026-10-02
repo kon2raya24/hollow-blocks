@@ -4,6 +4,11 @@
 // tune (plucked banduria over a guitar bass) that speeds up floor by floor, the Bayanihan fanfare and
 // the neighbours' cheer, the flood's rumble, rain, wind and thunder in a bagyo, cicadas at noon.
 // Nothing plays until start() runs from a gesture.
+//
+// The music builds with the game (musicLevels): a tension layer (a pulsing low ostinato and a high
+// tremolo) rises as the stack climbs, a rhythm layer (shaker and claps) comes in while a combo runs,
+// and a Bayanihan gets a brass stinger. Each layer crossfades, all of it on the music bus, under the
+// effects and through the limiter. Kapatas's voice has its own bus: a recording, or a babble.
 const SAMPLES = ['wood', 'plank', 'mining', 'metal', 'plate', 'soft', 'heavy', 'bell', 'tin', 'glass'];
 // each piece's material: [recording, pitch, gain]
 const MAT = { I: [['wood', 1.25, 0.9]], O: [['mining', 0.8, 0.8], ['heavy', 1.1, 0.35]], T: [['plate', 0.7, 0.55], ['mining', 1.1, 0.4]], S: [['metal', 1.0, 0.6], ['tin', 0.8, 0.3]], Z: [['plank', 1.0, 0.9]], J: [['plate', 1.15, 0.7], ['glass', 1.2, 0.25]], L: [['mining', 0.95, 0.7]], 8: [['soft', 0.8, 0.9]] };
@@ -17,9 +22,17 @@ const TUNE = [
   [72, 71, 69, 72, 71, 69, 67, 69], [71, -1, 69, -1, 67, -1, -1, -1],
 ];
 
+// How much of each music layer a game calls for: tension from the stack's height, rhythm from a combo.
+export function musicLevels(g) {
+  if (!g || !g.board) return { tension: 0, rhythm: 0 };
+  let top = 22; for (let i = 0; i < g.board.length; i++) if (g.board[i]) { top = Math.floor(i / 10); break; }
+  const h = 22 - top;
+  return { tension: Math.max(0, Math.min(1, (h - 7) / 9)), rhythm: g.combo > 0 ? Math.min(1, 0.45 + g.combo * 0.12) : 0 };
+}
+
 export function createAudio({ base = 'assets/sfx/' } = {}) {
-  let ctx = null, master = null, music = null, sfx = null, noise = null, muted = false, amb = null;
-  const buf = {}, norm = {}, mix = { music: 1, sfx: 1 };
+  let ctx = null, master = null, music = null, sfx = null, noise = null, muted = false, amb = null, tens = null, tensF = null, rhy = null, voiceBus = null;
+  const buf = {}, norm = {}, mix = { music: 1, sfx: 1, voice: 0.8 }, vbuf = {}, lv = { tension: 0, rhythm: 0 };
   // each recording brought to the same loudness (RMS over its loud part), and never past 0.9 at its peak
   function normOf(b) {
     const d = b.getChannelData(0); let peak = 0, sum = 0, n = 0;
@@ -38,6 +51,11 @@ export function createAudio({ base = 'assets/sfx/' } = {}) {
     master = ctx.createGain(); master.gain.value = muted ? 0 : 0.7; master.connect(lim);
     music = ctx.createGain(); music.gain.value = 0; music.connect(master);
     sfx = ctx.createGain(); sfx.gain.value = mix.sfx; sfx.connect(master);
+    // the layers: tension through a filter that opens as it rises, rhythm, both on the music bus
+    tensF = ctx.createBiquadFilter(); tensF.type = 'lowpass'; tensF.frequency.value = 600; tensF.Q.value = 2; tensF.connect(music);
+    tens = ctx.createGain(); tens.gain.value = 0; tens.connect(tensF);
+    rhy = ctx.createGain(); rhy.gain.value = 0; rhy.connect(music);
+    voiceBus = ctx.createGain(); voiceBus.gain.value = 1; voiceBus.connect(master);
     noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     setInterval(schedule, 50);
@@ -67,16 +85,23 @@ export function createAudio({ base = 'assets/sfx/' } = {}) {
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g).connect(out); o.start(t); o.stop(t + dur + 0.05);
   }
-  function hiss(dur, freq, gain, when = 0, type = 'bandpass', to = 0) {
+  function hiss(dur, freq, gain, when = 0, type = 'bandpass', to = 0, out = sfx) {
     if (!ctx || muted) return;
     const t = ctx.currentTime + when, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
     s.buffer = noise; f.type = type; f.frequency.setValueAtTime(freq, t); if (to) f.frequency.exponentialRampToValueAtTime(to, t + dur);
     g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    s.connect(f).connect(g).connect(sfx); s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05);
+    s.connect(f).connect(g).connect(out); s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05);
   }
   // a plucked string: bright attack, quick fade (the banduria), doubled an octave up, softly
   function pluck(n, when, gain = 0.03) { tone(NOTE(n), 0.22, 'triangle', gain, when, 0, music); tone(NOTE(n + 12), 0.08, 'square', gain * 0.25, when, 0, music); }
 
+  // a brass stab for a Bayanihan, on the music bus: a chord through a closing filter, and a timpani
+  function stinger() {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime, f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(500, t + 0.9); f.connect(music);
+    for (const n of [55, 62, 67, 71, 74]) tone(NOTE(n), 0.9, 'sawtooth', 0.035, 0, 0, f);
+    tone(NOTE(43), 0.7, 'sine', 0.2, 0, 0.6, music);
+  }
   function schedule() {
     if (!ctx || !playing || muted) return;
     const eighth = 30 / tempo;
@@ -88,6 +113,10 @@ export function createAudio({ base = 'assets/sfx/' } = {}) {
       const b = BASS[bar % 4];
       if (s === 0 || s === 4) tone(NOTE(b[s ? 1 : 0]), eighth * 1.8, 'triangle', 0.07, when, 0, music);
       if (s === 2 || s === 6) for (const c of [b[0] + 12, b[0] + 16, b[0] + 19]) tone(NOTE(c), eighth * 0.4, 'triangle', 0.01, when, 0, music); // the strum
+      // tension: a pulsing low root every eighth, and over it, high, a nervous tremolo on the tune
+      if (lv.tension > 0.02) { tone(NOTE(b[0] - 12), eighth * 0.8, 'sawtooth', 0.05, when, 0, tens); if (lv.tension > 0.45 && n > 0) { tone(NOTE(n + 12), eighth * 0.22, 'triangle', 0.018, when, 0, tens); tone(NOTE(n + 12), eighth * 0.22, 'triangle', 0.014, when + eighth * 0.5, 0, tens); } }
+      // rhythm: a shaker on the eighths, claps on two and four
+      if (lv.rhythm > 0.02) { hiss(eighth * 0.35, 7000, s % 2 ? 0.05 : 0.08, when, 'highpass', 0, rhy); if (s === 2 || s === 6) { hiss(0.09, 1500, 0.22, when, 'bandpass', 0, rhy); hiss(0.07, 1100, 0.15, when + 0.012, 'bandpass', 0, rhy); } }
       nextAt += eighth; step++;
     }
   }
@@ -104,6 +133,30 @@ export function createAudio({ base = 'assets/sfx/' } = {}) {
       music.gain.setTargetAtTime(live ? mix.music * 1.4 : 0, ctx.currentTime, 0.2); // the tune sits under the effects
       if (amb) { const storm = g && g.mode === 'bagyo' && live, noon = g && g.mode === 'deadline' && live; amb.rain.g.gain.setTargetAtTime(storm ? 0.05 : 0, ctx.currentTime, 0.6); amb.wind.g.gain.setTargetAtTime(storm ? 0.06 + Math.sin(ctx.currentTime * 0.4) * 0.03 : 0, ctx.currentTime, 0.8); amb.cicada.g.gain.setTargetAtTime(noon ? 0.012 * (0.6 + 0.4 * Math.sin(ctx.currentTime * 7)) : 0, ctx.currentTime, 0.1); }
       tempo = Math.min(200, 112 + ((g && g.level) || 1) * 5 + (g && g.mode === 'deadline' ? 20 : 0));
+      // the layers crossfade toward what the game calls for
+      const want = live ? musicLevels(g) : { tension: 0, rhythm: 0 };
+      lv.tension = want.tension; lv.rhythm = want.rhythm;
+      tens.gain.setTargetAtTime(want.tension * 1.1, ctx.currentTime, 0.9); tensF.frequency.setTargetAtTime(500 + want.tension * 2400, ctx.currentTime, 0.9);
+      rhy.gain.setTargetAtTime(want.rhythm, ctx.currentTime, 0.5);
+    },
+    // the voice: a recording (decoded once), or a babble shaped like the line
+    setVoice(v) { mix.voice = v; },
+    voiceFile(url, vol = 1) {
+      if (!ctx || muted) return;
+      const go = (b) => { const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = b; g.gain.value = vol * 1.2; src.connect(g).connect(voiceBus); src.start(); };
+      if (vbuf[url]) go(vbuf[url]); else fetch(url).then((r) => r.arrayBuffer()).then((a) => ctx.decodeAudioData(a)).then((b) => { vbuf[url] = b; go(b); }).catch(() => {});
+    },
+    blip(text = '', vol = 1) {
+      if (!ctx || muted) return;
+      // a syllable per vowel group: a buzzy voice through two formant filters, the pitch falling at the end
+      const syl = (text.toLowerCase().match(/[aeiou]+/g) || ['a']).slice(0, 9), F = { a: [750, 1250], e: [500, 1800], i: [320, 2200], o: [520, 950], u: [380, 850] };
+      syl.forEach((v, k) => {
+        const t = ctx.currentTime + 0.02 + k * 0.105, o = ctx.createOscillator(), g = ctx.createGain(), [f1, f2] = F[v[0]] || F.a;
+        o.type = 'sawtooth'; const p = 150 + (k === syl.length - 1 ? -25 : Math.sin(k * 1.7) * 18); o.frequency.setValueAtTime(p, t); o.frequency.linearRampToValueAtTime(p * 0.94, t + 0.09);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16 * vol, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.095);
+        for (const [f, q, a] of [[f1, 6, 1], [f2, 8, 0.5]]) { const b = ctx.createBiquadFilter(), ga = ctx.createGain(); b.type = 'bandpass'; b.frequency.value = f; b.Q.value = q; ga.gain.value = a; o.connect(b).connect(ga).connect(g); }
+        g.connect(voiceBus); o.start(t); o.stop(t + 0.11);
+      });
     },
     event(e) {
       if (!ctx || muted) return;
@@ -113,10 +166,11 @@ export function createAudio({ base = 'assets/sfx/' } = {}) {
         case 'hold': hiss(0.12, 3000, 0.05, 0, 'highpass'); break;
         case 'hardDrop': tone(110, 0.14, 'sine', 0.14, 0, 0.5); if (!play('heavy', 0.35 + Math.min(20, e.rows) * 0.02, 0.9)) hiss(0.08, 800, 0.08); break;
         case 'lock': if (!impact(e.piece, 0.8)) { tone(240, 0.05, 'square', 0.03); hiss(0.05, 1500, 0.04); } break;
+        case 'stinger': stinger(); break;
         case 'lines': {
           hiss(0.5, 1200, 0.16, 0, 'lowpass', 200);
           for (let k = 0; k < Math.min(4, e.n + 1); k++) play('mining', 0.5, 0.7 + k * 0.12, k * 0.05);
-          if (e.n === 4) { hiss(1.8, 700, 0.12, 0.3, 'bandpass', 900); hiss(1.5, 2200, 0.05, 0.3, 'bandpass'); play('bell', 0.35, 1, 0.45); } // the neighbours cheer
+          if (e.n === 4) { stinger(); hiss(1.8, 700, 0.12, 0.3, 'bandpass', 900); hiss(1.5, 2200, 0.05, 0.3, 'bandpass'); play('bell', 0.35, 1, 0.45); } // the neighbours cheer
           const run = e.n === 4 ? [0, 4, 7, 12, 16, 19, 24] : [0, 4, 7, 12].slice(0, e.n + 1);
           run.forEach((k, i) => tone(NOTE(67 + k + Math.min(8, e.combo)), 0.14, 'square', 0.04, i * 0.06));
           if (e.spin) tone(400, 0.3, 'sawtooth', 0.03, 0, 2);

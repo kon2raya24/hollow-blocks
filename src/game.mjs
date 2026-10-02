@@ -442,7 +442,8 @@ function timeAndGoals(g, ev) {
 }
 function bank(g, ev) {
   if (!g.toolsOn || g.tools.length >= TOOL_MAX) return;
-  const tool = g.toolset[Math.floor(rand(g.trs) * g.toolset.length)];
+  const pool = g.noI ? g.toolset.filter((t) => t !== 'kreyn') : g.toolset; // Lunes: no kreyn, it lowers a kawayan
+  const tool = pool[Math.floor(rand(g.trs) * pool.length)];
   g.tools.push(tool);
   ev.push({ type: 'toolEarned', tool });
 }
@@ -457,6 +458,7 @@ export function useTool(g, ev) {
     // every covered hole in the bottom four rows
     for (let x = 0; x < COLS; x++) { let roof = false; for (let y = 0; y < ROWS; y++) { if (b[y * COLS + x]) roof = true; else if (roof && y >= ROWS - 4) { b[y * COLS + x] = CEMENT; cells.push([x, y]); } } }
   } else if (tool === 'kreyn') {
+    if (g.noI) return false; // no kawayan on a Lunes, not even by crane
     const p = spawnPiece('I');
     if (!fits(g.board, p)) return false;
     g.cur = p; g.lockT = 0; g.resets = 0; g.lowest = p.y; g.fall = 0; g.lastRot = false;

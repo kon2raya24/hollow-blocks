@@ -36,7 +36,14 @@ export function person(look = {}) {
   put(head, new THREE.SphereGeometry(0.108, 16, 10, 0, TAU, 0, Math.PI * 0.5), hair, 0, 0.115, -0.008).scale.set(0.97, 1, 1.02);
   put(head, new THREE.SphereGeometry(0.022, 8, 6), skin, 0, 0.09, 0.1); // nose
   for (const s of [-1, 1]) { put(head, new THREE.SphereGeometry(0.012, 6, 5), mat('#140c0a', { roughness: 0.3 }), s * 0.035, 0.12, 0.092); put(head, new THREE.SphereGeometry(0.02, 6, 5), skin, s * 0.1, 0.1, 0); }
-  if (L.moustache) put(head, new THREE.BoxGeometry(0.07, 0.014, 0.02), hair, 0, 0.06, 0.098);
+  if (L.moustache && !L.beard) put(head, new THREE.BoxGeometry(0.07, 0.014, 0.02), hair, 0, 0.06, 0.098);
+  if (L.beard) { const bm = mat('#f4f1ea', { roughness: 1 }); put(head, new THREE.SphereGeometry(0.1, 14, 10), bm, 0, 0.03, 0.04).scale.set(0.95, 0.9, 0.75); put(head, new THREE.BoxGeometry(0.08, 0.02, 0.03), bm, 0, 0.07, 0.1); }
+  if (L.santa) { // a red cone with a white brim and a pompom, flopped back
+    const sm = mat('#d8222a', { roughness: 0.8 }), wm = mat('#ffffff', { roughness: 1 }), hat = joint(head, 0, 0.17, -0.01);
+    put(hat, new THREE.CylinderGeometry(0.125, 0.125, 0.05, 18), wm, 0, 0, 0);
+    const cone = put(hat, new THREE.ConeGeometry(0.115, 0.26, 16), sm, 0, 0.13, -0.02); cone.rotation.x = -0.45;
+    put(hat, new THREE.SphereGeometry(0.035, 10, 8), wm, 0, 0.21, -0.14);
+  }
   if (L.hat) {
     const hat = joint(head, 0, 0.16, 0);
     const hm = mat(L.hat, { roughness: 0.35, metalness: 0.05 });
