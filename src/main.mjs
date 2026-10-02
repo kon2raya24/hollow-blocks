@@ -1123,17 +1123,22 @@ function openAccount() {
     $('account-body').innerHTML = `<div class="modes"><button type="button" data-tab="login" aria-pressed="${!reg}">Mag-login</button><button type="button" data-tab="register" aria-pressed="${reg}">Gumawa ng account</button></div>
       <form id="acct-form" class="acct-form" novalidate>
         <label>Pangalan <small>3–16: letra, numero, _ . -</small><input name="user" autocomplete="username" maxlength="16" autocapitalize="off" spellcheck="false" required></label>
-        <label>Password <small>6 o higit pa</small><input name="pass" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" maxlength="72" required></label>
+        <label>Password <small>${reg ? '8 o higit pa; huwag ang pangalan o 12345678' : ''}</small><input name="pass" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" maxlength="72" required></label>
+        <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
         <p class="acct-err" id="acct-err" role="alert"></p>
         <button type="submit" class="primary">${reg ? 'Gumawa at mag-login' : 'Mag-login'}</button>
       </form>
       <p class="note">${reg ? 'Ang progreso mo sa device na ito ay dadalhin sa bagong account. <b>Walang email:</b> tandaan ang password mo.' : 'Mag-login para maibalik ang progreso mo at makasali sa Ranking, kahit na-clear ang browser.'}</p>`;
     for (const b of $('account-body').querySelectorAll('[data-tab]')) b.onclick = () => { acctTab = b.dataset.tab; openAccount(); };
+    if (reg) online.prepare(); // the puzzle solves while the name is typed
     $('acct-form').onsubmit = async (e) => {
       e.preventDefault();
       const f = e.target, btn = f.querySelector('button[type=submit]');
       btn.disabled = true; $('acct-err').textContent = '';
-      const r = await (reg ? online.register : online.login)(f.querySelector('[name=user]').value.trim(), f.querySelector('[name=pass]').value);
+      if (reg) $('acct-err').textContent = 'Sinusuri na hindi ka bot…';
+      const user = f.querySelector('[name=user]').value.trim(), pass = f.querySelector('[name=pass]').value;
+      const r = reg ? await online.register(user, pass, f.querySelector('[name=website]').value) : await online.login(user, pass);
+      if (reg && !r.ok) online.prepare(); // a fresh puzzle for the next try
       btn.disabled = false;
       if (!r.ok) { $('acct-err').textContent = r.error || 'Hindi nakapasok.'; return; }
       labels();
@@ -1163,10 +1168,10 @@ function openRanking(m = rkMode, d = rkDiff || data.difficulty) {
   online.board(b).then((r) => {
     if (ask !== rkAsk || mode !== 'ranking') return;
     if (!r.ok) { $('rk-body').innerHTML = `<p class="muted">${esc(r.error || 'Hindi makuha ang Ranking.')}</p>`; return; }
-    const mine = r.me && r.me.rank;
-    $('rk-body').innerHTML = r.top.length ? `<ol class="rk-list">${r.top.map((x, i) => `<li class="${mine === i + 1 ? 'me' : ''}"><span class="rk-n">${i + 1}</span><span class="rk-name">${esc(x.name)}</span><b>${fmtVal(b, x.value)}</b><button type="button" data-rw="${x.id}" aria-label="Panoorin ang laro ni ${esc(x.name)}">${icon('play', 14)}</button></li>`).join('')}</ol>`
+    $('rk-body').innerHTML = r.top.length ? `<ol class="rk-list">${r.top.map((x, i) => `<li><span class="rk-n">${i + 1}</span><span class="rk-name">${esc(x.name)}</span><b>${fmtVal(b, x.value)}</b><button type="button" data-rw="${x.id}" aria-label="Panoorin ang laro ni ${esc(x.name)}">${icon('play', 14)}</button></li>`).join('')}</ol>`
       : `<p class="muted">Wala pang nakapasok dito. Ikaw na ang mauna!</p>`;
-    $('rk-me').innerHTML = !r.me ? `${r.n} manlalaro` : r.me.rank ? `Ikaw: <b>#${r.me.rank}</b> sa ${r.n} · ${fmtVal(b, r.me.value)}` : `Wala ka pa rito, ${esc(r.me.name)}. Maglaro ng ${RANKED[m]}!`;
+    $('rk-me').textContent = `${r.n} manlalaro`;
+    if (online.user) online.rank(b).then((me) => { if (ask !== rkAsk || !me.ok) return; $('rk-body').querySelectorAll('li')[me.rank - 1]?.classList.add('me'); $('rk-me').innerHTML = me.rank ? `Ikaw: <b>#${me.rank}</b> sa ${r.n} · ${fmtVal(b, me.value)}` : `Wala ka pa rito, ${esc(me.name)}. Maglaro ng ${RANKED[m]}!`; });
     for (const x of $('rk-body').querySelectorAll('[data-rw]')) x.onclick = async () => {
       const rp = await online.replay(b, x.dataset.rw);
       if (!rp.ok) { toast(rp.error || 'Walang replay.', 2000); return; }

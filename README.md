@@ -103,6 +103,14 @@ Make an **account** (a name and a password, no email) and your progress is saved
 
 **Ranking** has a board for Bahay, Karera, Bagyo and Deadline at each difficulty, today's Daily and this week's Lingguhan. A finished game is sent as its replay, and the server plays it through the same rules to get the score (or the 40-line time), so a board only ever holds games that really happened. Each player's best game on a board can be watched from it.
 
+**Fair play and security:**
+- **New accounts:** making one costs a small proof of work. The page solves a signed, single-use puzzle while you type. There's also a hidden field that only bots fill in, and sign-ups are capped per address and per hour.
+- **Passwords:** at least 8 characters, not a common one, and not containing the name. They're stored as scrypt hashes.
+- **Logins:** slowed per name, per address and per both. An unknown name takes as long to answer as a wrong password, so names can't be probed by timing.
+- **Scores:** a replay is turned away if its inputs keep a machine's even beat, if it places pieces faster than a person can, or if it copies a game already on the board under another name. Replays are size-checked before they're unpacked.
+- **Abuse:** every address has a request budget, and the boards are cached at the edge.
+- **The page:** a Content Security Policy, plus no framing, no MIME sniffing and a strict referrer policy.
+
 **Difficulty:**
 - **Madali:** slower falls and a longer grace period before a piece sticks.
 - **Katamtaman:** the classic.
@@ -138,7 +146,7 @@ Accounts and Ranking need the server: `api/hb.mjs` is a Vercel function over Ups
   - Tapatan: keys routed to each player, each player's input reaching only their well, the handicaps, and a whole match replaying from both inputs (`test/tapatan.test.mjs`)
   - every module parses (`test/syntax.test.mjs`)
   - the shop's catalogue, buying, equipping and unlocks, the barya a game pays, the streak across days, time zones, gaps and the grace day, the haptics scaling, the voice's choice of source, and the music's layers (`test/phase3.test.mjs`); the kreyn never gives a kawayan on a Lunes (`test/chapter2.test.mjs`)
-  - the server: accounts, slowing down password guesses, the cloud save that never lets an older copy win, which board a game belongs on, scores read from the replay and never from the request, and Deadline's fastest-first board (`test/server.test.mjs`)
+  - the server: accounts, the sign-up proof of work, the honeypot and sign-up caps, password rules, slowing down password guesses per name and per address, the request budget, a bot's even beat caught at every pace while uneven play passes, decompression bombs, copied replays, the cloud save that never lets an older copy win, which board a game belongs on, scores read from the replay and never from the request, and Deadline's fastest-first board (`test/server.test.mjs`)
   - rule options: no options plays exactly as before; DAS, ARR, soft drop, hold off, the queue length, and the 180° turn with its kicks (`test/options.test.mjs`)
 - **The offline cache:** every module, three.js and the sounds are precached.
 - **Sanity floors:** from a bot (`src/bot.mjs`) that scores every placement with the classic El-Tetris weights. For versus it also finds T-spins (soft drop, then a last turn into a three-corner slot) and, in the T-spinner style, keeps T-slots open; the rivals are this bot, paced and given a mistake rate (`src/versus.mjs`).
