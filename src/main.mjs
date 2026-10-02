@@ -205,7 +205,7 @@ function start() {
   else if (lesson) big(lesson.name, 'Pagsasanay · Sundan ang gintong anino', 1.8);
   else big(job && data.mode === 'proyekto' ? job.name : MODES[data.mode].name, job && data.mode === 'proyekto' ? describe(job).goal : { deadline: '40 hanay, bilisan!', bagyo: 'Tumataas ang baha!', karera: 'Dalawang minuto. Kita, kita, kita!', daily: `Daily ${dateKey()} · pareho para sa lahat` }[data.mode] || 'Buuin ang bahay!', 1.6);
   if (match) hint('versus', 'Ang mga sako sa tabi ng well: putik na paparating. Mag-clear para harangin!');
-  hint('move', touch ? 'I-tap para iikot, i-drag pakaliwa o pakanan, i-flick pababa para ibagsak. May mga button din sa ibaba.' : '← → galaw · ↑ o X ikot · Z pabalik · ↓ dahan-dahan · Space bagsak · C o Shift imbak · may controller din');
+  hint('move', touch ? 'Tap: ikot · Drag: galaw · Flick ↓ bagsak, ↑ imbak' : '← → galaw · ↑ o X ikot · Z pabalik · ↓ dahan-dahan · Space bagsak · C o Shift imbak · may controller din');
 }
 
 function finish(done) {
@@ -472,13 +472,63 @@ function nextToast() {
   const el = $('toast'), item = toasts.shift();
   toastBusy = !!item;
   if (!item) { el.hidden = true; return; }
-  el.textContent = item[0]; el.hidden = false;
+  el.textContent = item[0]; el.hidden = false; toastEnd = performance.now() + item[1];
   setTimeout(nextToast, item[1]);
+  placeToast();
+}
+// ---------- keeping the well clear: while a piece is in play nothing covers it. A banner becomes a
+// callout in the top chip; a hint sits beside the well and its boards (wide screens) or goes in that
+// chip too (phones); Kapatas's bubble stays off it ----------
+let toastEnd = 0, calloutT = 0;
+const live = () => mode === 'play' && !!game && (game.phase === 'play' || game.phase === 'clear') && !(view && view.cine);
+const wellBox = (boards = false) => (view ? view.wellRect(boards) : $('board').getBoundingClientRect());
+const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+function callout(title, sub = '', secs = 1.6) {
+  const el = $('callout');
+  el.querySelector('b').textContent = title; el.querySelector('b').hidden = !title; el.querySelector('em').textContent = sub;
+  el.hidden = false; el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+  $('h-mode').classList.add('under'); calloutT = secs;
+}
+function placeToast() {
+  const el = $('toast');
+  if (el.hidden) return;
+  if (!live()) { if (el.classList.contains('side')) { el.classList.remove('side'); el.style.cssText = ''; } return; }
+  const w = wellBox(true), roomL = w.left - 24, roomR = innerWidth - w.right - 24;
+  if (Math.max(roomL, roomR) >= 200) {
+    const width = Math.min(340, Math.max(roomL, roomR));
+    el.classList.add('side');
+    el.style.width = `${width}px`;
+    el.style.left = `${roomL >= roomR ? Math.max(12, w.left - 12 - width) : w.right + 12}px`;
+    el.style.top = `${Math.round(w.top + (w.bottom - w.top) * 0.55)}px`;
+  } else if (view) { el.hidden = true; callout('', el.textContent, Math.max(1.2, (toastEnd - performance.now()) / 1000)); }
+}
+// a clear's words and kita: beside the well and its boards if there's room, else in the top chip
+function scorePop(word, more, tone = '') {
+  if (!view) return; // the 2D board draws its own
+  const rest = more.filter(Boolean), w = wellBox(true), room = innerWidth - w.right - 24;
+  if (room < 170) { callout(word, rest.join(' · '), 1.3); return; }
+  const el = $('pops');
+  el.innerHTML = `<b class="${tone}">${word}</b>${rest.map((x, i) => `<span class="${i === 0 ? 'money' : ''}">${x}</span>`).join('')}`;
+  el.style.left = `${Math.round(w.right + 16)}px`; el.style.top = `${Math.round(w.top + (w.bottom - w.top) * 0.42)}px`; el.style.maxWidth = `${Math.min(300, room)}px`;
+  el.hidden = false; el.classList.remove('go'); void el.offsetWidth; el.classList.add('go');
+  clearTimeout(scorePop.t); scorePop.t = setTimeout(() => { el.hidden = true; }, 1400);
+}
+function keepClear(dt) {
+  calloutT -= dt;
+  if (calloutT <= 0 && !$('callout').hidden) { $('callout').hidden = true; $('h-mode').classList.remove('under'); }
+  if (mode !== 'play') { if (!$('callout').hidden) { calloutT = 0; $('callout').hidden = true; $('h-mode').classList.remove('under'); } return; }
+  // a banner still up when a piece comes into play finishes in the chip
+  if (!$('big').hidden && live()) { $('big').hidden = true; if (bigT > 0.35) callout($('big').querySelector('b').textContent, $('big').querySelector('span').textContent, bigT); bigT = 0; }
+  placeToast();
+  // the coach's line: beside the well if there's room, else at the top
+  const f = $('finesse');
+  if (!f.hidden) { f.classList.remove('side', 'top'); if (live() && overlaps(f.getBoundingClientRect(), wellBox())) { const w = wellBox(true); f.classList.add(innerWidth - w.right >= 230 ? 'side' : 'top'); if (f.classList.contains('side')) f.style.left = `${w.right + 12}px`; } else f.style.left = ''; }
 }
 function hint(id, text) { if (data.hints.includes(id)) return; data.hints.push(id); persist(); toast(text); }
 let bigT = 0;
 function big(title, sub = '', secs = 1.4) {
   if (!view) return; // the 2D board letters its own
+  if (live()) { callout(title, sub, secs); return; } // a piece is in play: the chip, not the middle of the well
   const el = $('big'); el.querySelector('b').textContent = title; el.querySelector('span').textContent = sub;
   el.hidden = false; el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); bigT = secs;
 }
@@ -499,11 +549,11 @@ function onEvent(e) {
   switch (e.type) {
     case 'go': say('go', true); break;
     case 'lines':
-      if (e.n === 4) { big('BAYANIHAN!', e.b2b ? 'Sunod-sunod! ×1.5' : 'Tulong-tulong!', 1.6); speak('bayanihan'); }
-      else { if (e.spin) speak('tspin'); else if (e.b2b) say('b2b', true); else if (e.combo >= 2) say('combo'); else if (Math.random() < 0.3) say('one'); }
+      if (e.n === 4) { big('BAYANIHAN!', `${e.b2b ? 'Sunod-sunod! ×1.5' : 'Tulong-tulong!'} · +${peso(e.points)}`, 1.6); speak('bayanihan'); }
+      else { scorePop(e.spin ? (e.spin === 'mini' ? 'MINI T-SPIN' : `T-SPIN ${['', 'SINGLE', 'DOUBLE', 'TRIPLE'][e.n]}!`) : ['', 'ISANG HANAY', 'DALAWA!', 'TATLO!'][e.n], [`+${peso(e.points)}`, e.b2b ? 'SUNOD-SUNOD ×1.5' : '', e.combo > 0 ? `TULOY-TULOY ×${e.combo}` : ''], e.spin ? 'pink' : ''); if (e.spin) speak('tspin'); else if (e.b2b) say('b2b', true); else if (e.combo >= 2) say('combo'); else if (Math.random() < 0.3) say('one'); }
       if (e.n === 1) hint('bayanihan', 'Tip: apat na hanay nang sabay ay BAYANIHAN, ang pinakamalaking kita!');
       break;
-    case 'tspin': say('tspin', true); break;
+    case 'tspin': say('tspin', true); scorePop(e.kind === 'mini' ? 'MINI T-SPIN' : 'T-SPIN!', [], 'pink'); break;
     case 'spawn':
       if (e.piece === 'I') { if (sinceI >= 12) say('relief', true); sinceI = 0; }
       else if (++sinceI === 12) say('drought', true);
@@ -511,7 +561,7 @@ function onEvent(e) {
     case 'levelUp': if (!(view && game.mode === 'bahay' && (1 + Math.floor(game.lines / 10)) % 5 === 0)) { big(`Palapag ${e.level}!`, 'Bagong palapag · New floor', 1.5); say('level', true); } break;
     case 'rise': if (Math.random() < 0.35) say('rise'); hint('bagyo', 'Tumataas ang baha mula sa ilalim! Punuin ang butas para matanggal ang putik.'); break;
     case 'hardDrop': break;
-    case 'toolEarned': toast(`May bagong gamit: ${e.tool.toUpperCase()}! Pindutin ang ${touch ? 'kahon ng gamit' : 'E'} para gamitin.`, 2400); buzz([10, 20, 10]); break;
+    case 'toolEarned': toast(touch ? `Bagong gamit: ${e.tool.toUpperCase()}! Pindutin ang kahon.` : `May bagong gamit: ${e.tool.toUpperCase()}! Pindutin ang E para gamitin.`, 2400); buzz([10, 20, 10]); break;
     case 'tool': say('tool', true); break;
     case 'lindol': say('lindol', true); break;
     case 'perfect': big('MALINIS!', 'Perfect clear', 1.6); break;
@@ -1428,7 +1478,7 @@ function frame(now) {
   const vmode = mode === 'play' || mode === 'replay' ? 'play' : mode === 'pause' ? 'pause' : mode === 'results' ? 'results' : mode === 'safety' ? 'safety' : mode === 'shop' ? 'shop' : 'title';
   const nextN = viewer ? (viewer.pb.rec.head.opts?.next || 5) : data.rules.next;
   if (view) {
-    view.frame(g, dt, { mode: vmode, reduced: reduced(), cine: data.opt.cine && !match && !lesson && !viewer, ghost: data.opt.ghost, rival: rivalG, p2: !!(match && match.local), shopTab, hint: lessonHint(), plumb: plumbHint(), next: nextN, onThunder: () => A.thunder(), onCeremony: (n) => { big('BAHAY NA!', `${n} palapag · Salamat, bayanihan!`, 2.4); say('ceremony', true); A.event({ type: 'ceremony' }); if (game) recordHouse(game, n); } });
+    view.frame(g, dt, { mode: vmode, pops: mode === 'play' && !!game, reduced: reduced(), cine: data.opt.cine && !match && !lesson && !viewer, ghost: data.opt.ghost, rival: rivalG, p2: !!(match && match.local), shopTab, hint: lessonHint(), plumb: plumbHint(), next: nextN, onThunder: () => A.thunder(), onCeremony: (n) => { big('BAHAY NA!', `${n} palapag · Salamat, bayanihan!`, 2.4); say('ceremony', true); A.event({ type: 'ceremony' }); if (game) recordHouse(game, n); } });
     // the rival's bubble over its scaffold
     rbubbleT -= dt; rsayCool -= dt;
     const rb = $('rbubble'), rp = view.rivalHead(), ron = rbubbleT > 0 && (mode === 'play' || mode === 'results') && rp.on && !!match;
@@ -1439,8 +1489,10 @@ function frame(now) {
     const el = $('bubble'), p = view.kapHead(), on = bubbleT > 0 && mode === 'play' && p.on && !view.cine;
     el.hidden = !on;
     if (on) { const hw = el.offsetWidth / 2 + 6; p.x = Math.max(hw, Math.min(innerWidth - hw, p.x)); el.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) translate(-50%, -100%)`; el.style.opacity = String(Math.min(1, bubbleT / 0.3)); }
+    if (on && live() && overlaps(el.getBoundingClientRect(), wellBox())) el.hidden = true; // his voice still says it
     bigT -= dt; if (bigT <= 0) $('big').hidden = true;
   } else R.draw(g, t, { reduced: reduced(), best: game ? data.best[bestKey()] || 0 : 0, rival: rivalG, hint: lessonHint(), plumb: plumbHint(), next: nextN });
+  keepClear(dt);
   A.update(g, (!!game && mode === 'play') || (!!viewer && !viewer.paused), dt);
   requestAnimationFrame(frame);
 }
@@ -1488,12 +1540,12 @@ async function boot() {
   if (location.hash.startsWith('#r=')) watch(location.hash.slice(3));
   if (TEST) {
     // fast-forward for soak tests: n ticks of the bot, drawing a frame every 20
-    const fast = (n) => { for (let k = 0; k < n; k++) { const g = game; if (!g || mode !== 'play') break; for (const e of step(g, bot(g, { pace: 1 }), 1 / 60, (inp) => { if (rec) record(rec, inp); })) onEvent(e); if (view && k % 20 === 19) view.frame(g, 1 / 3, { mode: 'play', reduced: reduced(), cine: data.opt.cine, ghost: true }); } return game && game.lines; };
+    const fast = (n) => { for (let k = 0; k < n; k++) { const g = game; if (!g || mode !== 'play') break; for (const e of step(g, bot(g, { pace: 1 }), 1 / 60, (inp) => { if (rec) record(rec, inp); })) onEvent(e); if (view && k % 20 === 19) view.frame(g, 1 / 3, { mode: 'play', pops: true, reduced: reduced(), cine: data.opt.cine, ghost: true }); } return game && game.lines; };
     // Tapatan with a bot on each side
     const fastTap = (n) => { for (let k = 0; k < n; k++) { if (!match || mode !== 'play' || match.phase !== 'play') break; onMatch(matchStep(match, bot(match.a, { pace: 4 }), 1 / 60, null, bot(match.b, { pace: 6, style: 'tetris' }))); if (view && k % 20 === 19) view.frame(game, 1 / 3, { mode: 'play', reduced: reduced(), cine: false, ghost: true, rival: match.b, p2: true, next: data.rules.next }); } return match && match.tick; };
     // the same for a match: the bot plays your well too
     const fastVs = (n) => { for (let k = 0; k < n; k++) { if (!match || mode !== 'play' || match.phase !== 'play') break; const out = matchStep(match, bot(match.a, { pace: 4 }), 1 / 60, (inp) => { if (rec) record(rec, inp); }); onMatch(out); if (view && k % 20 === 19) view.frame(game, 1 / 3, { mode: 'play', reduced: reduced(), cine: false, ghost: true, rival: match.b, next: data.rules.next }); } return match && match.tick; };
-    window.__hb = { online, openAccount, offerDouble, shopOffers, openRanking, openModes, openShop, openBook, openHouse, get houses() { return houses; }, recordHouse, labels, V, wearLooks, job: (id) => openBrief(contractById(id)), fastTap, openTapatan, get tap() { return tap; }, tapIn, openMap, weeklyBanner, inspSays, fast, fastVs, A, get game() { return game; }, get match() { return match; }, get mode() { return mode; }, get demo() { return demo; }, get viewer() { return viewer; }, get coach() { return coach; }, get ghost() { return ghost; }, replays, start, get view() { return view; }, pause, resume, openSettings: () => openSettings(mode === 'pause' ? 'pause' : 'title'), openKeys, openVs, openRival, openLessons, openLesson: (id) => openLesson(lessonById(id)), openReplays, watch, encodeLast: async () => rec && encode(rec), keepReplay: () => keepReplay(game, true), data, showFinesse, setRec: (r) => { rec = r; } };
+    window.__hb = { live, wellBox, online, openAccount, offerDouble, shopOffers, openRanking, openModes, openShop, openBook, openHouse, get houses() { return houses; }, recordHouse, labels, V, wearLooks, job: (id) => openBrief(contractById(id)), fastTap, openTapatan, get tap() { return tap; }, tapIn, openMap, weeklyBanner, inspSays, fast, fastVs, A, get game() { return game; }, get match() { return match; }, get mode() { return mode; }, get demo() { return demo; }, get viewer() { return viewer; }, get coach() { return coach; }, get ghost() { return ghost; }, replays, start, get view() { return view; }, pause, resume, openSettings: () => openSettings(mode === 'pause' ? 'pause' : 'title'), openKeys, openVs, openRival, openLessons, openLesson: (id) => openLesson(lessonById(id)), openReplays, watch, encodeLast: async () => rec && encode(rec), keepReplay: () => keepReplay(game, true), data, showFinesse, setRec: (r) => { rec = r; } };
     if (Q.get('rival')) { vsPick = Q.get('rival'); }
     if (Q.get('lesson')) lesson = lessonById(Q.get('lesson'));
     if (Q.get('difficulty')) data.difficulty = Q.get('difficulty');

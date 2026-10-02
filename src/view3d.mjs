@@ -359,15 +359,16 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         for (const r of e.rows) burstRow(g, r, e.n);
         const midY = e.rows.reduce((a, r) => a + cy(r), 0) / e.rows.length;
         const word = e.spin ? (e.spin === 'mini' ? 'MINI T-SPIN' : `T-SPIN ${['', 'SINGLE', 'DOUBLE', 'TRIPLE'][e.n]}!`) : WORDS[e.n];
-        if (e.n < 4) fx.callout(word, 0, midY + 0.35, 1.2, { color: e.spin ? 'pink' : 'white', height: e.spin ? 1.1 : 0.92, life: 1.4 });
-        fx.callout(`+₱${e.points.toLocaleString('en-US')}`, 0, midY - 0.5, 1.2, { color: 'green', height: 0.62, life: 1.3, delay: 0.08 });
+        // in a player's own game the page shows these words off the well (opts.pops: main.mjs scorePop)
+        if (e.n < 4 && !opts.pops) fx.callout(word, 0, midY + 0.35, 1.2, { color: e.spin ? 'pink' : 'white', height: e.spin ? 1.1 : 0.92, life: 1.4 });
+        if (!opts.pops) fx.callout(`+₱${e.points.toLocaleString('en-US')}`, 0, midY - 0.5, 1.2, { color: 'green', height: 0.62, life: 1.3, delay: 0.08 });
         if (e.b2b) {
           // back to back: a streak of sparks along the rows, gold
           for (const r of e.rows) for (let k = 0; k < 26; k++) { const f = k / 25; fx.spark(WELL.x0 + f * 5, cy(r) + rnd(-0.15, 0.15), 0.35, k % 3 ? '#ffd27a' : '#ffffff', { vx: rnd(2, 6), vy: rnd(-0.5, 2.5), vz: rnd(0.5, 2), size: rnd(0.05, 0.09), grow: 0, life: rnd(0.3, 0.6), a: 1, drag: 1.5, grav: 0.6 }); }
           fx.bar(0, midY, 0.4, 5.6, CS * 0.35 * e.rows.length, '#ffc040', 0.35, { grow: 2.4 });
         }
-        if (e.b2b) fx.callout('SUNOD-SUNOD ×1.5', 0, midY - 1.2, 1.2, { color: 'blue', height: 0.52, life: 1.3, delay: 0.16 });
-        if (e.combo > 0) fx.callout(`TULOY-TULOY ×${e.combo}`, 0, midY + 1.3, 1.2, { color: 'orange', height: 0.56, life: 1.2, delay: 0.12 });
+        if (e.b2b && !opts.pops) fx.callout('SUNOD-SUNOD ×1.5', 0, midY - 1.2, 1.2, { color: 'blue', height: 0.52, life: 1.3, delay: 0.16 });
+        if (e.combo > 0 && !opts.pops) fx.callout(`TULOY-TULOY ×${e.combo}`, 0, midY + 1.3, 1.2, { color: 'orange', height: 0.56, life: 1.2, delay: 0.12 });
         if (!reduced) { kickV -= 0.03 + e.n * 0.018; flashK = Math.max(flashK, e.n === 4 ? 0.28 : e.spin ? 0.14 : 0); }
         if (e.n === 4) {
           reactKapatas('victory'); cheerT = 3.5;
@@ -378,7 +379,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         else if (e.n >= 2 || e.combo >= 2) reactKapatas('cheer');
         break;
       }
-      case 'tspin': fx.callout(e.kind === 'mini' ? 'MINI T-SPIN' : 'T-SPIN!', 0, cy(10), 1.2, { color: 'pink', height: 0.85, life: 1.2 }); reactKapatas('cheer'); break;
+      case 'tspin': if (!opts.pops) fx.callout(e.kind === 'mini' ? 'MINI T-SPIN' : 'T-SPIN!', 0, cy(10), 1.2, { color: 'pink', height: 0.85, life: 1.2 }); reactKapatas('cheer'); break;
       case 'levelUp': {
         if (!cine && !reduced && opts.cine && g === lastGame && opts.live) cine = { kind: 'house', t: 0, dur: 1.5 };
         reactKapatas('point');
@@ -515,7 +516,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     dt = clamp(dt || 0, 0, 0.1);
     clock += dt;
     const t = clock;
-    reduced = !!o.reduced; opts.cine = o.cine !== false; opts.live = o.mode === 'play'; o0 = o;
+    reduced = !!o.reduced; opts.cine = o.cine !== false; opts.live = o.mode === 'play'; opts.pops = !!o.pops; o0 = o;
     if (g !== lastGame) { lastGame = g; resetState(); }
     // time of day and weather
     const [ta, tb, tk] = todFor(g, o.mode);
@@ -758,6 +759,13 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   // Where something in the world is on screen, in CSS pixels (for the foreman's bubble).
   function screenOf(x, y, z) { const v = vp.set(x, y, z).project(camera), r = canvas.getBoundingClientRect(); return { x: ((v.x + 1) / 2) * r.width, y: ((1 - v.y) / 2) * r.height, on: v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1 }; }
   const kapHead = () => screenOf(kap.x, 2.25, kap.z);
+  // the well on screen (page px); with boards, the hold/next/tally boards beside it (above it on a phone)
+  function wellRect(boards = false) {
+    const m = boards && !compact ? 2.7 : 0, top = WELL.top + (boards && compact ? 2.2 : 0), r = canvas.getBoundingClientRect();
+    const ps = [[WELL.x0 - m, WELL.y0], [WELL.x1 + m, WELL.y0], [WELL.x0 - m, top], [WELL.x1 + m, top]].map(([x, y]) => screenOf(x, y, 0.3));
+    const xs = ps.map((p) => p.x + r.left), ys = ps.map((p) => p.y + r.top);
+    return { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) };
+  }
   const inspHead = () => (insp && insp.on ? screenOf(...insp.head()) : { x: 0, y: 0, on: false });
   const rivalHead = () => (rig && vsOn ? screenOf(rig.RX, rig.LIFT + (WELL.top + 1.75) * rig.S, rig.Z + 0.3) : { x: 0, y: 0, on: false });
 
@@ -810,7 +818,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   resize();
   applyTod('golden', null, 0, 1);
   return {
-    frame, event, resize, post, renderer, scene, setEnv, setPeople, setCrowd, kapHead, screenOf, rivalEvent, attack, setVersus, rivalHead, inspHead,
+    frame, event, resize, post, renderer, scene, setEnv, setPeople, setCrowd, kapHead, screenOf, wellRect, rivalEvent, attack, setVersus, rivalHead, inspHead,
     setHouseStyle(id) { site.setHouseStyle(id); },
     setSkin, setOutfit, setTheme, get looks() { return { skin: skinId, outfit: outfitId, theme: themeId }; },
     snapshot(w = 360, h = 220, shot = null) { return new Promise((resolve) => snapWant.push({ w, h, resolve, shot })); },

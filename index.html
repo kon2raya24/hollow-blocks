@@ -324,6 +324,22 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
 .adlayer { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(8,5,10,.88); }
 .adcard { width: min(420px, 90vw); display: grid; gap: 10px; text-align: center; }
 .adcard small { letter-spacing: .2em; color: #b8e6b2; } .adleft { font: italic 900 72px/1 "Barlow Condensed", sans-serif; color: var(--gold); }
+/* keeping the well clear (main.mjs keepClear): the top chip's callout, a hint beside the well */
+#callout { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 5; max-width: min(46vw, 440px); padding: 4px 18px 5px; text-align: center; pointer-events: none;
+  background: linear-gradient(180deg, rgba(58,40,20,.95), rgba(24,16,10,.95)); border: 2px solid var(--gold); box-shadow: 0 0 0 2px var(--dark), 0 0 18px rgba(255,200,80,.35); clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 100%, 0 100%); }
+#callout b { display: block; font: italic 900 24px/1 "Barlow Condensed", sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--gold); }
+#callout em { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; font: italic 800 13px/1.15 "Barlow Condensed", sans-serif; letter-spacing: .04em; color: #fff8e1; }
+#callout.pop { animation: pop .35s cubic-bezier(.2,1.4,.4,1); }
+.chip.mid.under { visibility: hidden; }
+@media (max-width: 560px) { #callout { max-width: calc(100vw - 190px); padding: 3px 12px 4px; } #callout b { font-size: 18px; } #callout em { font-size: 11.5px; } }
+#toast.side { bottom: auto; transform: none; text-align: left; padding: 8px 14px; background: rgba(14,10,18,.88); border-left: 3px solid var(--gold); }
+#finesse.side { transform: none; bottom: 30%; } #finesse.top { bottom: auto; top: calc(max(10px, env(safe-area-inset-top)) + 54px); }
+#pops { position: absolute; pointer-events: none; display: grid; gap: 2px; text-align: left; }
+#pops b { font: italic 900 34px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; color: #fff8e1; text-shadow: 0 3px 0 rgba(0,0,0,.55), 0 0 14px rgba(0,0,0,.5); }
+#pops b.pink { color: #ff8ae2; } #pops span { font: italic 900 22px/1 "Barlow Condensed", sans-serif; letter-spacing: .04em; color: #ffd23f; text-shadow: 0 2px 0 rgba(0,0,0,.55); } #pops span.money { color: #8ef08a; }
+#pops.go { animation: popsRise 1.4s ease-out forwards; }
+@keyframes popsRise { 0% { opacity: 0; transform: translateY(14px) scale(.9); } 12% { opacity: 1; transform: translateY(0) scale(1.04); } 25% { transform: none; } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-22px); } }
+@media (prefers-reduced-motion: reduce) { #pops.go { animation: none; } }
 </style>
 </head>
 <body>
@@ -349,6 +365,8 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
     <div id="rbubble" hidden></div>
     <div id="bubble" hidden></div>
     <div id="big" hidden><b></b><span></span></div>
+    <div id="callout" hidden><b></b><em></em></div>
+    <div id="pops" hidden></div>
     <div id="toast" role="status" hidden></div>
 
     <section class="screen" id="title">
