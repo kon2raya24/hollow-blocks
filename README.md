@@ -27,6 +27,7 @@
 ## Modes
 
 - **Bahay:** endless. Every ten rows is a new floor, and faster. It starts at golden hour; as the house rises the sun sets, and past the fifth floor the crew works on under floodlights. Every fifth floor finishes a house: the neighbours cheer and a line of banderitas goes up.
+- **Klasiko:** the pure game. It's endless at one speed the whole way (Madali, Katamtaman or Mahirap decides which), with no tools, no cutscenes and no change of light. It has its own Ranking board.
 - **Deadline:** clear forty rows as fast as you can, at noon, in the heat haze.
 - **Bagyo:** a storm, with rain, wind and lightning, and the flood pushes rows of wet, dripping mud up from below with a squelch, faster as you go, while brown water creeps over the site. Hold it off as long as you can.
 - **Karera:** two minutes, the most kita wins.

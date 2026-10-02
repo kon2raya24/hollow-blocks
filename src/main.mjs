@@ -204,7 +204,7 @@ function start() {
   else if (game.mode === 'lingguhan') big(weeklyEvent().name, 'Lingguhan · tatlong minuto', 1.8);
   else if (game.insp) { big('ANG INSPEKTOR', 'Dumating ang City Inspector!', 2.2); setTimeout(() => inspSays('enter', true), 1800); }
   else if (lesson) big(lesson.name, 'Pagsasanay · Sundan ang gintong anino', 1.8);
-  else big(job && data.mode === 'proyekto' ? job.name : MODES[data.mode].name, job && data.mode === 'proyekto' ? describe(job).goal : { deadline: '40 hanay, bilisan!', bagyo: 'Tumataas ang baha!', karera: 'Dalawang minuto. Kita, kita, kita!', daily: `Daily ${dateKey()} · pareho para sa lahat` }[data.mode] || 'Buuin ang bahay!', 1.6);
+  else big(job && data.mode === 'proyekto' ? job.name : MODES[data.mode].name, job && data.mode === 'proyekto' ? describe(job).goal : { klasiko: 'Iisang bilis. Purong laro.', deadline: '40 hanay, bilisan!', bagyo: 'Tumataas ang baha!', karera: 'Dalawang minuto. Kita, kita, kita!', daily: `Daily ${dateKey()} · pareho para sa lahat` }[data.mode] || 'Buuin ang bahay!', 1.6);
   if (match) hint('versus', 'Ang mga sako sa tabi ng well: putik na paparating. Mag-clear para harangin!');
   hint('move', touch ? 'Tap: ikot · Drag: galaw · Flick ↓ bagsak, ↑ imbak' : '← → galaw · ↑ o X ikot · Z pabalik · ↓ dahan-dahan · Space bagsak · C o Shift imbak · may controller din');
 }
@@ -722,6 +722,7 @@ function toggleSound() { A.start(); data.muted = !data.muted; A.setMuted(data.mu
 // The modes, for the PLAY button and the Mga Laro cards: an icon, a line, and your best.
 const MODE_INFO = {
   bahay: { icon: 'bahay', line: 'Walang katapusan. Bawat 10 hanay, bagong palapag. May gamit.', diff: true },
+  klasiko: { icon: 'target', line: 'Purong laro: iisang bilis buong laro, walang gamit, walang eksena.', diff: true },
   deadline: { icon: 'orasan', line: '40 hanay sa tanghaling tapat. Pinakamabilis ang panalo.', diff: true },
   bagyo: { icon: 'bagyo', line: 'Tumataas ang putik mula sa ilalim. Tumagal hangga’t kaya.', diff: true },
   karera: { icon: 'karera', line: 'Dalawang minuto, pinakamataas na kita. May gamit.', diff: true },
@@ -735,7 +736,7 @@ const MODE_INFO = {
 const modeName = (m) => (m === 'versus' ? 'Laban' : m === 'training' ? 'Pagsasanay' : m === 'tapatan' ? 'Tapatan' : MODES[m] ? MODES[m].name : m);
 function modeBest(m) {
   const b = data.best[`${m}.${data.difficulty}`];
-  if (m === 'bahay' || m === 'karera' || m === 'bagyo') return b ? `Best ${peso(b)}` : 'Wala pang best';
+  if (m === 'bahay' || m === 'klasiko' || m === 'karera' || m === 'bagyo') return b ? `Best ${peso(b)}` : 'Wala pang best';
   if (m === 'deadline') return b ? `Best ${clock(b)}` : 'Wala pang best';
   if (m === 'daily') return data.daily[dateKey()] ? `Ngayon ${peso(data.daily[dateKey()].score)}` : `Daily ${dateKey()}`;
   if (m === 'lingguhan') { const w = weeklyEvent(); return `${w.name}${data.weekly.week === w.week && data.weekly.best ? ` · ${peso(data.weekly.best)}` : ''}`; }
@@ -764,7 +765,7 @@ function labels() {
   if (lost) $('ad-streak').innerHTML = `${icon('apoy', 18)} Iligtas ang ${lost.count}-araw na streak<small>patalastas</small>`;
   if ((data.boost?.games || 0) > 0) $('title-rank').innerHTML += ` · <b>2×</b> XP ${data.boost.games}`;
   weeklyBanner();
-  $('diff-note').textContent = { madali: 'Madali: mas mabagal ang bagsak at mas matagal bago dumikit.', katamtaman: 'Katamtaman: ang klasiko.', mahirap: 'Mahirap: magsisimula sa ika-6 na palapag.' }[data.difficulty] + ' (Bahay, Deadline, Bagyo, Karera)';
+  $('diff-note').textContent = { madali: 'Madali: mas mabagal ang bagsak at mas matagal bago dumikit.', katamtaman: 'Katamtaman: ang klasiko.', mahirap: 'Mahirap: magsisimula sa ika-6 na palapag.' }[data.difficulty] + ' (Bahay, Klasiko, Deadline, Bagyo, Karera)';
 }
 // Mga Laro: a card per mode; picking one plays it (or opens its own screen)
 function openModes() {
@@ -916,7 +917,7 @@ $('ld-list').onclick = openLessons;
 $('lretry').onclick = retryLesson;
 
 // ---------- replays: the list, the viewer, sharing ----------
-const MODE_LABEL = { deadline: 'Deadline', karera: 'Karera', daily: 'Daily', versus: 'Laban', bahay: 'Bahay', bagyo: 'Bagyo', proyekto: 'Proyekto' };
+const MODE_LABEL = { klasiko: 'Klasiko', deadline: 'Deadline', karera: 'Karera', daily: 'Daily', versus: 'Laban', bahay: 'Bahay', bagyo: 'Bagyo', proyekto: 'Proyekto' };
 const resultOf = (m) => (m.mode === 'deadline' ? (m.done ? clock(m.ticks) : `${m.lines}/40`) : m.mode === 'versus' ? `vs ${rivalById(m.rival)?.name || ''}` : peso(m.score));
 function openReplays() {
   mode = 'replays';
@@ -1338,7 +1339,7 @@ function openStats() {
   const best = (m) => { const v = data.best[`${m}.${data.difficulty}`]; return v ? (m === 'deadline' ? clock(v) : peso(v)) : '—'; };
   $('stats-body').innerHTML = `<div class="xp">${rk.name} · ${data.xp.toLocaleString('en-US')} XP${rk.next ? ` · ${rk.need.toLocaleString('en-US')} pa para sa ${rk.next}` : ''}<i style="--p:${Math.round(rk.progress * 100)}%"></i></div>
     <table>${row('Laro', st.games)}${row('Hanay', st.lines)}${row('Bayanihan', st.bayanihan)}${row('T-spin', st.tspins)}${row('Gamit na nagamit', st.tools)}${row('Oras sa site', clock(st.seconds * 60))}
-    ${row(`Best Bahay (${DIFFICULTY[data.difficulty].name})`, best('bahay'))}${row('Best Deadline', best('deadline'))}${row('Best Bagyo', best('bagyo'))}${row('Best Karera', best('karera'))}${row('Bituin sa Proyekto', `${CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0)}/45`)}</table>
+    ${row(`Best Bahay (${DIFFICULTY[data.difficulty].name})`, best('bahay'))}${row('Best Klasiko', best('klasiko'))}${row('Best Deadline', best('deadline'))}${row('Best Bagyo', best('bagyo'))}${row('Best Karera', best('karera'))}${row('Bituin sa Proyekto', `${CONTRACTS.reduce((a, c) => a + (data.stars[c.id] || 0), 0)}/45`)}</table>
     <h3 style="margin:10px 0 4px;font:italic 900 18px 'Barlow Condensed';color:#ffd23f">MEDALYA ${data.medals.length}/${MEDALS.length}</h3>
     <div class="medals">${MEDALS.map((m) => `<div class="medal ${data.medals.includes(m.id) ? 'got' : ''}" title="${m.desc}"><b>★</b>${m.name}</div>`).join('')}</div>
     <h3 style="margin:10px 0 4px;font:italic 900 18px 'Barlow Condensed';color:#ffd23f">LINGGUHAN · ${data.wmedals.length}/${WEEKLY_MEDALS.length} · ${icon('token', 18)} ${data.tokens} token</h3>
@@ -1414,7 +1415,7 @@ function hud(g) {
   $('h-score').querySelector('b').textContent = peso(g.score);
   if (bumped) { const el = $('h-score'); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
   $('h-mode').querySelector('b').textContent = g.modeDef.name.toUpperCase();
-  $('h-mode').querySelector('em').textContent = g.mode === 'deadline' ? `${Math.max(0, 40 - g.lines)} hanay pa` : `Palapag ${g.level} · ${g.lines} hanay${g.rise && view && view.debug.compact ? ` · baha ${Math.ceil(g.rise.t / 60)}s` : ''}`;
+  $('h-mode').querySelector('em').textContent = g.mode === 'deadline' ? `${Math.max(0, 40 - g.lines)} hanay pa` : g.mode === 'klasiko' ? `${g.lines} hanay · bilis ${g.level}` : `Palapag ${g.level} · ${g.lines} hanay${g.rise && view && view.debug.compact ? ` · baha ${Math.ceil(g.rise.t / 60)}s` : ''}`;
   const timed = g.mode === 'deadline' || g.mode === 'proyekto' || g.limit;
   $('h-best').querySelector('small').textContent = g.limit ? 'Natitira' : timed ? 'Oras' : 'Best';
   $('h-best').querySelector('b').textContent = g.limit ? clock(Math.max(0, g.limit - g.elapsed)) : timed ? clock(g.elapsed) : peso(Math.max(best, g.score));
@@ -1489,7 +1490,7 @@ function frame(now) {
   const vmode = mode === 'play' || mode === 'replay' ? 'play' : mode === 'pause' ? 'pause' : mode === 'results' ? 'results' : mode === 'safety' ? 'safety' : mode === 'shop' ? 'shop' : 'title';
   const nextN = viewer ? (viewer.pb.rec.head.opts?.next || 5) : data.rules.next;
   if (view) {
-    view.frame(g, dt, { mode: vmode, pops: mode === 'play' && !!game, reduced: reduced(), cine: data.opt.cine && !match && !lesson && !viewer, ghost: data.opt.ghost, rival: rivalG, p2: !!(match && match.local), shopTab, hint: lessonHint(), plumb: plumbHint(), next: nextN, onThunder: () => A.thunder(), onCeremony: (n) => { big('BAHAY NA!', `${n} palapag · Salamat, bayanihan!`, 2.4); say('ceremony', true); A.event({ type: 'ceremony' }); if (game) recordHouse(game, n); } });
+    view.frame(g, dt, { mode: vmode, pops: mode === 'play' && !!game, reduced: reduced(), cine: data.opt.cine && !match && !lesson && !viewer && g.mode !== 'klasiko', ghost: data.opt.ghost, rival: rivalG, p2: !!(match && match.local), shopTab, hint: lessonHint(), plumb: plumbHint(), next: nextN, onThunder: () => A.thunder(), onCeremony: (n) => { big('BAHAY NA!', `${n} palapag · Salamat, bayanihan!`, 2.4); say('ceremony', true); A.event({ type: 'ceremony' }); if (game) recordHouse(game, n); } });
     // the rival's bubble over its scaffold
     rbubbleT -= dt; rsayCool -= dt;
     const rb = $('rbubble'), rp = view.rivalHead(), ron = rbubbleT > 0 && (mode === 'play' || mode === 'results') && rp.on && !!match;

@@ -43,6 +43,7 @@ export const READY = 60, CLEAR_T = 20, LOCK_RESETS = 15, NEXT = 5, SOFT = 0.5;
 export const POINTS = { lines: [0, 100, 300, 500, 800], tspin: [400, 800, 1200, 1600], mini: [100, 200, 400], combo: 50, soft: 1, hard: 2 };
 export const MODES = {
   bahay: { key: 'bahay', name: 'Bahay', goal: null, levels: true, tools: true },
+  klasiko: { key: 'klasiko', name: 'Klasiko', goal: null, levels: false, fixed: true, tools: false }, // endless at one speed (the difficulty's), nothing extra
   deadline: { key: 'deadline', name: 'Deadline', goal: 40, levels: false, tools: false },
   bagyo: { key: 'bagyo', name: 'Bagyo', goal: null, levels: true, tools: false, rise: { start: 600, fastest: 240, step: 20 } },
   karera: { key: 'karera', name: 'Karera', goal: null, levels: true, tools: true, limit: 120 * 60 }, // two minutes, score attack
@@ -138,7 +139,7 @@ export function createGame({ seed = 1, mode = 'bahay', difficulty = 'katamtaman'
   const m = MODES[mode] || MODES.bahay;
   const c = contract || {};
   const toolsOn = tools === null ? c.tools === true || (!!m.tools && c.tools !== false) : !!tools;
-  const start = c.startLevel || (m.levels ? diff.level : 1);
+  const start = c.startLevel || (m.levels || m.fixed ? diff.level : 1);
   const g = {
     seed, mode: m.key, modeDef: m, difficulty: diff.key, diff,
     rs: (seed * 2654435761) >>> 0, board: new Array(COLS * ROWS).fill(0), bag: [], queue: [], hold: null, holdUsed: false, cur: null,

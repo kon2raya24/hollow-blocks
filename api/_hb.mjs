@@ -40,13 +40,13 @@ export function redis(url, token) {
 // ---------- the boards ----------
 // bahay, karera and bagyo rank kita, deadline ranks the time to 40 lines (less is better); each by
 // difficulty. The Daily ranks by date and the weekly event by week, both always Katamtaman.
-export const BOARD = /^(?:(?:bahay|karera|bagyo|deadline)\.(?:madali|katamtaman|mahirap)|daily\.\d{4}-\d\d-\d\d|lingguhan\.\d{4}-W\d\d)$/;
+export const BOARD = /^(?:(?:bahay|klasiko|karera|bagyo|deadline)\.(?:madali|katamtaman|mahirap)|daily\.\d{4}-\d\d-\d\d|lingguhan\.\d{4}-W\d\d)$/;
 export const lowWins = (board) => board.startsWith('deadline.');
 // The board a replay's game belongs on, or why it has none.
 export function boardFor(head, now) {
   if (!head || head.vs || head.job || head.lesson || head.bonus) return { err: 'Walang talaan ang larong ito.' };
   if (!DIFFICULTY[head.diff]) return { err: 'Hindi kilalang hirap.' };
-  if (['bahay', 'karera', 'bagyo', 'deadline'].includes(head.mode)) return head.ev ? { err: 'Hindi tugma ang laro.' } : { board: `${head.mode}.${head.diff}` };
+  if (['bahay', 'klasiko', 'karera', 'bagyo', 'deadline'].includes(head.mode)) return head.ev ? { err: 'Hindi tugma ang laro.' } : { board: `${head.mode}.${head.diff}` };
   if (head.diff !== 'katamtaman' || head.ts) return { err: 'Hindi tugma ang laro.' };
   if (head.mode === 'daily') {
     // today's Daily, or yesterday's if it ended just after midnight
@@ -237,7 +237,7 @@ export function createApi(db, { prefix: P = 'hb:', secret = 'dev-only-secret', n
       const prev = await db.cmd('ZSCORE', zk, u.id);
       const better = prev === null || (low ? v.value < Number(prev) : v.value > Number(prev));
       const cmds = better ? [['ZADD', zk, v.value, u.id], ['HSET', rk, u.id, String(body.code)]] : [];
-      if (!/^(bahay|karera|bagyo|deadline)\./.test(v.board)) cmds.push(['EXPIRE', zk, 60 * 86400], ['EXPIRE', rk, 60 * 86400], ['EXPIRE', sk, 60 * 86400]);
+      if (!/^(bahay|klasiko|karera|bagyo|deadline)\./.test(v.board)) cmds.push(['EXPIRE', zk, 60 * 86400], ['EXPIRE', rk, 60 * 86400], ['EXPIRE', sk, 60 * 86400]);
       await db.pipe(cmds);
       const [rank, n] = await db.pipe([[low ? 'ZRANK' : 'ZREVRANK', zk, u.id], ['ZCARD', zk]]);
       return out(200, { board: v.board, value: v.value, best: better ? v.value : Number(prev), improved: better, rank: rank + 1, of: n });

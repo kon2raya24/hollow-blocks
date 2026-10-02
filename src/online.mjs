@@ -5,8 +5,8 @@ import { solve } from './pow.mjs';
 const SKEY = 'hollowblocks.session';
 
 // The boards: each mode with a board, how its value reads, and whether it splits by difficulty.
-export const RANKED = { bahay: 'Bahay', karera: 'Karera', bagyo: 'Bagyo', deadline: 'Deadline', daily: 'Daily', lingguhan: 'Lingguhan' };
-export const byDiff = (mode) => ['bahay', 'karera', 'bagyo', 'deadline'].includes(mode);
+export const RANKED = { bahay: 'Bahay', klasiko: 'Klasiko', karera: 'Karera', bagyo: 'Bagyo', deadline: 'Deadline', daily: 'Daily', lingguhan: 'Lingguhan' };
+export const byDiff = (mode) => ['bahay', 'klasiko', 'karera', 'bagyo', 'deadline'].includes(mode);
 
 export function createOnline(base) {
   let sess = null;

@@ -276,6 +276,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
   function todFor(g, mode) {
     if (!g || mode === 'title') return ['golden', null, 0];
     if (g.mode === 'deadline') return ['noon', null, 0];
+    if (g.mode === 'klasiko') return ['golden', null, 0]; // nothing changes in Klasiko, the light included
     if (g.mode === 'bagyo') return ['storm', null, 0];
     const l = g.lines;
     if (l < 25) return ['golden', null, 0];
