@@ -141,6 +141,7 @@ function zeroBits(hex) { let n = 0; for (const c of hex) { const v = parseInt(c,
 // ---------- the API ----------
 // One handler for every route: { route, method, body, query, token, ip } in, { status, json, cache }
 // out. prefix: the keys' (production and previews keep apart); secret signs the sign-up puzzles.
+const PLAY_MODES = ['bahay', 'klasiko', 'deadline', 'bagyo', 'karera', 'daily', 'lingguhan', 'proyekto', 'versus', 'tapatan', 'training'];
 export function createApi(db, { prefix: P = 'hb:', secret = 'dev-only-secret', now = () => Date.now(), powBits = POW_BITS } = {}) {
   const k = (s) => `${P}${s}`;
   const out = (status, json, cache) => ({ status, json, cache });
@@ -258,6 +259,15 @@ export function createApi(db, { prefix: P = 'hb:', secret = 'dev-only-secret', n
       const [rank, val] = await db.pipe([[lowWins(b) ? 'ZRANK' : 'ZREVRANK', zk, u.id], ['ZSCORE', zk, u.id]]);
       return out(200, { name: u.name, rank: rank === null ? null : rank + 1, value: val === null ? null : Number(val) });
     },
+    // how the game is played: one count a game, by Manila day, mode and language; nothing about the player
+    async play({ body, ip }) {
+      const mode = String(body?.mode || ''), lang = String(body?.lang || '');
+      if (!PLAY_MODES.includes(mode) || !['en', 'fil'].includes(lang)) return out(400, { error: 'Hindi tugma ang laro.' });
+      if (await limited(`play:${ip}`, 60, 3600)) return busy();
+      const key = k(`stat:${dateKey(now())}:${mode}:${lang}`);
+      if (await db.cmd('INCR', key) === 1) await db.cmd('EXPIRE', key, 400 * 86400);
+      return out(200, { ok: true });
+    },
     // a ranked player's best game, to watch
     async replay({ query }) {
       const code = await db.cmd('HGET', k(`rp:${query.b}`), String(query.u));
@@ -267,7 +277,7 @@ export function createApi(db, { prefix: P = 'hb:', secret = 'dev-only-secret', n
   // each route: its method, and the query it may carry (nothing else, so the edge cache can't be dodged)
   const ROUTES = {
     challenge: ['GET', []], register: ['POST', []], login: ['POST', []], logout: ['POST', []], me: ['GET', []],
-    save: ['GET POST', []], score: ['POST', []], board: ['GET', ['b']], rank: ['GET', ['b']], replay: ['GET', ['b', 'u']],
+    save: ['GET POST', []], score: ['POST', []], play: ['POST', []], board: ['GET', ['b']], rank: ['GET', ['b']], replay: ['GET', ['b', 'u']],
   };
   return async function api(req) {
     const spec = ROUTES[req.route], q = req.query || {};

@@ -246,3 +246,18 @@ test('Deadline ranks the fastest 40 lines first, and an unfinished one is turned
   const cut = { ...quick.rec, t: Math.floor(quick.rec.t / 2), ev: quick.rec.ev.filter((_, i) => quick.rec.ev[i - (i % 2)] < quick.rec.t / 2) };
   assert.equal((await post(api, 'score', { code: await encode(cut) }, ana)).status, 422);
 });
+
+// How the game is played: an anonymous count per day, mode and language; nothing about who
+test('play: one count per game started, by day, mode and language; junk refused; flooding capped', async () => {
+  const db = fakeRedis(), api = createApi(db, { powBits: BITS, now: () => Date.parse('2026-10-06T04:00:00Z') });
+  const play = (body, ip = '9.9.9.9') => api({ route: 'play', method: 'POST', query: {}, ip, token: null, body });
+  assert.equal((await play({ mode: 'bahay', lang: 'en' })).status, 200);
+  await play({ mode: 'bahay', lang: 'en' }); await play({ mode: 'klasiko', lang: 'fil' });
+  assert.equal(await db.cmd('GET', 'hb:stat:2026-10-06:bahay:en'), '2');
+  assert.equal(await db.cmd('GET', 'hb:stat:2026-10-06:klasiko:fil'), '1');
+  assert.equal((await play({ mode: 'hack', lang: 'en' })).status, 400);
+  assert.equal((await play({ mode: 'bahay', lang: 'xx' })).status, 400);
+  let last;
+  for (let i = 0; i < 70; i++) last = await play({ mode: 'karera', lang: 'en' }, '8.8.8.8');
+  assert.equal(last.status, 429, 'more than 60 games an hour from one address is not a person');
+});

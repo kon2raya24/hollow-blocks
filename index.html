@@ -299,7 +299,7 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
 .housecard .stats { grid-template-columns: repeat(2, auto); }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 /* online: the account and Ranking */
-.tile span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.tile span { max-width: 100%; white-space: normal; text-align: center; line-height: 1.05; overflow-wrap: anywhere; } /* a long label (How to play) takes a second line rather than an ellipsis */
 @media (max-width: 760px) { .tile { font-size: 11px; letter-spacing: .01em; } }
 .flat .hubtiles { grid-template-columns: repeat(5, 1fr); width: min(560px, 100%); }
 #account .card { width: min(460px, 94vw); max-width: none; display: grid; gap: 10px; text-align: left; }
@@ -657,5 +657,6 @@ body.touch .kt .add { min-height: 40px; }
 <div id="curtain"></div>
 <script>if (matchMedia('(pointer: coarse)').matches) document.body.classList.add('touch');</script>
 <script type="module" src="src/main.mjs"></script>
+<script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>

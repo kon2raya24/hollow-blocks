@@ -35,7 +35,7 @@ const store = {
 // the server (accounts, the cloud save, Ranking): this deploy's own on Vercel; the GitHub Pages copy and
 // a local server use the live one
 // on a portal there are no accounts, cloud saves or Ranking of ours: an offline stand-in answers instead
-const OFFLINE = { user: null, prepare() {}, register: async () => ({ ok: false }), login: async () => ({ ok: false }), logout: async () => {}, pull: async () => ({ ok: false, status: 0 }), push: async () => ({ ok: false, status: 0 }), submit: async () => ({ ok: false, status: 0 }), board: async () => ({ ok: false }), rank: async () => ({ ok: false }), replay: async () => ({ ok: false }) };
+const OFFLINE = { user: null, prepare() {}, register: async () => ({ ok: false }), login: async () => ({ ok: false }), logout: async () => {}, pull: async () => ({ ok: false, status: 0 }), push: async () => ({ ok: false, status: 0 }), submit: async () => ({ ok: false, status: 0 }), board: async () => ({ ok: false }), rank: async () => ({ ok: false }), replay: async () => ({ ok: false }), play: async () => ({ ok: false }) };
 const online = PORTAL ? OFFLINE : createOnline(Q.get('api') ?? (location.hostname.endsWith('.vercel.app') ? '' : 'https://hollow-blocks.vercel.app'));
 if (PORTAL) document.body.classList.add('portal'); // hides what the portal doesn't allow: our login, Ranking, outside links
 const TIPS = [
@@ -212,6 +212,7 @@ function start() {
   if (auto && ((match && match.local) || lesson)) auto = null; // the bot stays on through a retry, not into Tapatan or a lesson
   if (auto) markAuto();
   autoBadge();
+  if (!TEST && !PORTAL && !AUTOPLAY) online.play(data.mode, getLang()); // which modes get played (anonymous counts; the privacy page says so)
   coach = lesson || data.rules.coach ? createCoach(data.rules.rot180) : null;
   $('finesse').hidden = true;
   toolsKey = '';

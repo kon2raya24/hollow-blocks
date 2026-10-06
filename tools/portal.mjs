@@ -12,7 +12,7 @@ rmSync(out, { recursive: true, force: true }); rmSync(zip, { force: true }); mkd
 for (const p of ['src', 'assets', 'icons']) cpSync(p, join(out, p), { recursive: true });
 writeFileSync(join(out, 'src/portal.mjs'), `// written by tools/portal.mjs: this copy is the ${portal} build\nexport const PORTAL = '${portal}';\n`);
 let html = readFileSync('index.html', 'utf8');
-for (const re of [/<meta name="google-adsense-account"[^>]*>\n/, /<meta http-equiv="Content-Security-Policy"[^>]*>\n/, /<link rel="manifest"[^>]*>\n/, /<meta property="og:[^>]*>\n/g, /<meta name="twitter:[^>]*>\n/g]) {
+for (const re of [/<script defer src="\/_vercel\/insights\/script.js"><\/script>\n/, /<meta name="google-adsense-account"[^>]*>\n/, /<meta http-equiv="Content-Security-Policy"[^>]*>\n/, /<link rel="manifest"[^>]*>\n/, /<meta property="og:[^>]*>\n/g, /<meta name="twitter:[^>]*>\n/g]) {
   if (!re.test(html)) throw new Error(`index.html changed: ${re}`);
   html = html.replace(re, '');
 }

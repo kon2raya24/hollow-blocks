@@ -51,5 +51,7 @@ export function createOnline(base) {
     board: (b) => call('board', { query: { b }, anon: true }),
     rank: (b) => call('rank', { query: { b } }),
     replay: (b, u) => call('replay', { query: { b, u }, anon: true }),
+    // a game started: counted by day, mode and language, with nothing about the player
+    play: (mode, lang) => call('play', { method: 'POST', body: { mode, lang }, anon: true }),
   };
 }
