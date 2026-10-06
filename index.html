@@ -53,6 +53,10 @@ body.flat .screen { background: rgba(20,16,24,.86); }
 #h-score.bump b { animation: bump .35s cubic-bezier(.2,1.6,.4,1); }
 @keyframes bump { from { filter: brightness(2); } }
 .corner { position: absolute; right: 12px; top: calc(max(10px, env(safe-area-inset-top)) + 64px); pointer-events: auto; }
+#auto { position: absolute; right: 12px; top: calc(max(10px, env(safe-area-inset-top)) + 108px); display: flex; gap: 6px; pointer-events: auto; z-index: 5; }
+#auto button { transform: none; min-height: 36px; padding: 2px 12px; font-size: 15px; }
+#auto-speed { background: linear-gradient(180deg, #ff9ae8, #c43a9a); border-color: #ffd0f4; color: #fff; }
+body.flat #auto { top: auto; bottom: calc(1% + 46px); right: 2%; }
 .corner button { transform: none; min-height: 32px; padding: 2px 12px; font-size: 14px; background: rgba(20,14,24,.6); border-color: rgba(255,255,255,.35); }
 /* Kapatas's bubble */
 #bubble { position: absolute; left: 0; top: 0; padding: 4px 11px 3px; background: #fffdf4; color: #1c1420; border: 2px solid var(--dark); border-radius: 12px; font: italic 900 17px/1.1 "Barlow Condensed", sans-serif; white-space: nowrap; box-shadow: 0 4px 0 rgba(0,0,0,.25); pointer-events: none; }
@@ -380,6 +384,7 @@ body.touch .kt .add { min-height: 40px; }
     <canvas id="board" width="432" height="560" role="img" aria-label="A construction site: a board of falling building materials framed by bamboo scaffolding, with a foreman in a hard hat"></canvas>
 
     <div id="hud" hidden>
+      <div id="auto" hidden><button type="button" id="auto-speed" aria-label="AUTO: change speed · bilis">AUTO 3×</button><button type="button" id="auto-off" aria-label="Itigil ang AUTO · Stop autoplay">✕</button></div>
       <div class="hud-top">
         <div class="chip" id="h-score"><small>Kita</small><b>₱0</b></div>
         <div class="chip mid" id="h-mode"><b>BAHAY</b><em>Palapag 1 · 0 hanay</em></div>

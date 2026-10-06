@@ -10,6 +10,7 @@ import { DEF_KEYS_P1, DEF_KEYS_P2, routes, createInput, press as pressIn, drain,
 import { ranked } from './bot.mjs';
 import { ITEMS, KINDS, itemById, isOwned, canBuy, buy, equip, unlockMet, coinsFor, DEFAULT_EQUIP, shortfall } from './shop.mjs';
 import { hapticFor, apply as applyHaptic } from './haptics.mjs';
+import { konami, AUTO_SPEEDS } from './cheat.mjs';
 import { createVoice, VOICE_LINES } from './voice.mjs';
 import { createAudio } from './audio.mjs';
 import { CONTRACTS, BARANGAYS, CHAPTERS, chapterOpen, contractById, starsFor, unlocked, brgyStars, describe, lockReason } from './contracts.mjs';
@@ -126,6 +127,8 @@ V.setOn(data.opt.voice !== false); V.setVolume(data.opt.voiceVol);
 function speak(slot) { say(null, true, VOICE_LINES[slot]); if (data.opt.voice !== false && !AUTOPLAY) V.say(slot, VOICE_LINES[slot]); }
 
 let mode = 'title', game = null, job = null; // job: the contract being played
+let auto = null; // { speed } while the bot plays (the Konami code)
+const konamiKey = konami();
 let match = null, vsPick = null, lesson = null, coach = null, rec = null, ghost = null, viewer = null, capture = null;
 let lessonEnd = 0; // ticks left before a lesson's verdict shows
 let tap = null; // Tapatan's series: { wins: [p1, p2], round }
@@ -194,6 +197,9 @@ function start() {
     if (data.rules.ghost && (data.mode === 'deadline' || data.mode === 'karera')) loadGhost(game, bestKey());
   }
   if (view) view.setVersus(!!match, match ? match.prof : null);
+  if (auto && ((match && match.local) || lesson)) auto = null; // the bot stays on through a retry, not into Tapatan or a lesson
+  if (auto) markAuto();
+  autoBadge();
   coach = lesson || data.rules.coach ? createCoach(data.rules.rot180) : null;
   $('finesse').hidden = true;
   toolsKey = '';
@@ -470,6 +476,19 @@ function onMatch(out) {
   if (top < 6 && match.phase === 'play') rivalSays('danger');
 }
 
+// ---------- the Konami code: the bot plays on for a signed-in player, and the game counts as usual ----------
+const markAuto = () => { if (game) game.auto = true; if (rec) rec.head.auto = 1; }; // the replay says so: the server waives its robot check
+function setAuto(on) {
+  auto = on ? { speed: 3 } : null;
+  if (on) markAuto();
+  clearInput(); autoBadge();
+  toast(on ? 'AUTO: si Kapatas-bot muna ang maglalaro. 1 · 2 · 3 para sa bilis (1×, 3×, 10×); ang code ulit para bumalik.' : 'Ikaw na ulit ang naglalaro.', 2800);
+}
+function setAutoSpeed(sp) { if (!auto) return; auto.speed = sp; autoBadge(); }
+function autoBadge() { $('auto').hidden = !auto; if (auto) $('auto-speed').textContent = `AUTO ${auto.speed}×`; }
+$('auto-speed').onclick = () => { if (auto) setAutoSpeed(AUTO_SPEEDS[(AUTO_SPEEDS.indexOf(auto.speed) + 1) % AUTO_SPEEDS.length]); };
+$('auto-off').onclick = () => setAuto(false);
+
 // ---------- "Hindi pa puwede": a box that says why something can't be done yet, and what would open it ----------
 // o: { title, text (html), hint, ico, go: { label, run } a way there }
 function nope(o) {
@@ -630,7 +649,7 @@ function onEvent(e) {
 
 function pause() { if (mode === 'play') { mode = 'pause'; show('pause'); } }
 function resume() { if (mode === 'pause') { mode = 'play'; clearInput(); show(null); } }
-function toMenu() { mode = 'title'; if (versionWaiting) { location.reload(); return; } if (newerSave) adopt(newerSave); game = null; job = null; match = null; lesson = null; viewer = null; ghost = null; tap = null; shopPrev = null; if (view) view.setVersus(false); wearLooks(); labels(); show('title'); }
+function toMenu() { mode = 'title'; auto = null; if (versionWaiting) { location.reload(); return; } if (newerSave) adopt(newerSave); game = null; job = null; match = null; lesson = null; viewer = null; ghost = null; tap = null; shopPrev = null; if (view) view.setVersus(false); wearLooks(); labels(); show('title'); }
 
 // ---------- input ----------
 let KEYS = {};
@@ -646,6 +665,8 @@ document.addEventListener('keydown', (e) => {
   if ($('nope').open) { if (e.key === 'Escape') { e.preventDefault(); closeNope(); } return; } // the box: Enter/Space press its buttons, Escape closes
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (capture && capture.kind === 'key') { e.preventDefault(); captured(k); return; }
+  if (playing() && !(match && match.local) && !lesson && (online.user || TEST) && konamiKey(k)) { e.preventDefault(); setAuto(!auto); return; }
+  if (auto && playing() && ['1', '2', '3'].includes(k)) { setAutoSpeed(AUTO_SPEEDS[+k - 1]); return; }
   if (match && match.local && (mode === 'play' || mode === 'pause')) {
     // Tapatan: each key to its player
     const r = tapRoutes.get(k);
@@ -656,6 +677,7 @@ document.addEventListener('keydown', (e) => {
   if (k === 'r' && mode === 'play' && lesson && act !== 'left' && act !== 'right') { retryLesson(); return; }
   if (act && act !== 'pause' && playing()) {
     e.preventDefault();
+    if (auto) return; // the bot has the keys
     if (!e.repeat && act !== 'down') pressed.push(act);
     if (HELD.has(act)) held.add(act);
     return;
@@ -1574,8 +1596,11 @@ function frame(now) {
       else if (lesson) verdict(judge(lesson, game, evs, null));
     };
     if (match && match.local) onMatch(matchStep(match, AUTOPLAY ? input : drain(tapIn[0]), dt * k, null, AUTOPLAY ? bot(match.b, { pace: 6 }) : drain(tapIn[1])));
-    else if (match) onMatch(matchStep(match, input, dt * k, onTick));
-    else for (const e of step(game, input, dt * k, onTick)) onEvent(e);
+    else for (let r = 0, n = auto ? auto.speed : 1; r < n && game && mode === 'play'; r++) { // the bot, at its speed
+      const inp = auto ? bot(game, { pace: 2 }) : input;
+      if (match) onMatch(matchStep(match, inp, dt * k, onTick));
+      else for (const e of step(game, inp, dt * k, onTick)) onEvent(e);
+    }
     hud(game);
     ghostHud();
     inspHud(dt);

@@ -114,7 +114,7 @@ export function verify(code, now) {
     }
   } catch { return { err: 'Hindi mapatakbo ang replay.' }; }
   if (g.phase !== 'over' && g.phase !== 'done') return { err: 'Hindi pa tapos ang laro.' };
-  const bot = robotic(profile(spawns, rec, g.elapsed));
+  const bot = rec.head.auto ? null : robotic(profile(spawns, rec, g.elapsed)); // auto: handed to the bot with the Konami code, by the owner's choice
   if (bot) return { err: bot };
   const sig = createHash('sha256').update(`${rec.head.seed}|${hashState(g)}`).digest('hex').slice(0, 32);
   if (lowWins(b.board)) return g.phase === 'done' ? { board: b.board, value: g.elapsed, lines: g.lines, sig } : { err: 'Hindi natapos ang 40 hanay.' };

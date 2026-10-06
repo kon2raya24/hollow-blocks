@@ -189,6 +189,11 @@ test('a bot\'s even beat is caught at every pace; a person\'s uneven play is not
     const v = verify(await encode(rec), Date.now());
     assert.ok(!v.err, `think ${think}: ${v.err}`);
   }
+  // a game handed to the bot with the Konami code says so, and is ranked like any other
+  const { rec, g } = played({ v: 1, mode: 'karera', diff: 'katamtaman', seed: 5, auto: 1 }, (x) => bot(x, { pace: 2 }));
+  const v = verify(await encode(rec), Date.now());
+  assert.ok(!v.err, `auto: ${v.err}`);
+  assert.equal(v.value, g.score);
   assert.ok(robotic({ seconds: 60, pps: 7, pieces: 420, gaps: 900, gapShare: 0.1, latShare: 0.1 }), 'faster than a person');
   assert.equal(robotic({ seconds: 60, pps: 3, pieces: 180, gaps: 400, gapShare: 0.6, latShare: 0.6 }), null, 'a drag-happy phone player');
   assert.equal(robotic({ seconds: 20, pps: 2, pieces: 20, gaps: 40, gapShare: 1, latShare: 1 }), null, 'too short to tell');
