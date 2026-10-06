@@ -1695,7 +1695,7 @@ async function boot() {
   show('title');
   if (online.user && !TEST) { sync(); setTimeout(flushScores, 4000); }
   if (!PORTAL) setTimeout(startAds, 3000); // a portal brings its own ads (or none)
-  else { crazyLoading(true); initCrazy().then(() => { crazyLoading(true); if (window.__loaded) crazyLoading(false); }); }
+  else if (PORTAL === 'crazygames') { crazyLoading(true); initCrazy().then(() => { crazyLoading(true); if (window.__loaded) crazyLoading(false); }); }
   try { if (sessionStorage.getItem('hollowblocks.restored')) { sessionStorage.removeItem('hollowblocks.restored'); setTimeout(() => toast(tr('Naibalik ang progreso ni {n} · Progress restored', { n: online.user }), 3200), 900); } } catch { /* no session storage */ }
   if (!CAPTURE) requestAnimationFrame((n) => { last = n; requestAnimationFrame(frame); });
   setTimeout(() => $('curtain').classList.add('off'), 250);
