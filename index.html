@@ -327,6 +327,8 @@ body.flat #inspbar { top: auto; bottom: 30px; } body.flat #tools { top: auto; bo
 #ad-streak { margin: 4px auto 0; font-size: 15px; padding: 6px 14px; }
 #shop-offers { margin: 4px 0 8px; } #shop-offers .adbtn { font-size: 14px; padding: 6px 12px; min-height: 36px; }
 .trialnote { display: block; color: #b8e6b2; font-size: 12px; }
+/* a portal's build: no login, Ranking, outside links or links to share */
+body.portal #rank-btn, body.portal #acct-btn, body.portal .help, body.portal [data-sh], body.portal #rb-share, body.portal #rk-acct, body.portal #results-rank { display: none !important; }
 .adlayer { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(8,5,10,.88); }
 .adcard { width: min(420px, 90vw); display: grid; gap: 10px; text-align: center; }
 #nope { padding: 0; border: 0; background: transparent; color: var(--ink); max-width: 92vw; overflow: visible; }
@@ -558,7 +560,7 @@ body.touch .kt .add { min-height: 40px; }
         <li><b>Phone:</b> tap para iikot, i-drag para gumalaw, i-flick pababa para ibagsak, pataas para mag-imbak; may mga button din. <b>Controller:</b> d-pad, ✕ ikot, ○ pabalik, △ imbak, □ gamit.</li>
         <li><b>Bayanihan:</b> apat na hanay nang sabay. Ang T-spin at sunod-sunod na Bayanihan ay may dagdag na kita.</li>
         <li><b>Gamit (tools):</b> minsan may kahon ng gamit ang isang piraso. Linisin ang hanay nito (o mag-Bayanihan) para makakuha, hanggang tatlo. <i data-icon="martilyo"></i> Martilyo: basag ang pinakamataas na bloke sa ilalim ng piraso. <i data-icon="semento"></i> Semento: tapalan ang mga butas sa ibaba. <i data-icon="kreyn"></i> Kreyn: gawing kawayan ang piraso. <i data-icon="pison"></i> Pison: patagin ang tumpok. <i data-icon="merienda"></i> Merienda: bagal ang bagsak nang 15 segundo.</li>
-        <li><b>Mga mode:</b> Bahay (walang katapusan), Klasiko (iisang bilis buong laro, walang gamit), Deadline (40 hanay), Bagyo (putik mula sa ilalim), Karera (2 minuto, pinakamataas na kita), Daily (parehong piraso para sa lahat ngayong araw), Proyekto (15 kontrata, 1–3 bituin).</li>
+        <li><b>Mga mode:</b> Bahay (walang katapusan), Klasiko (iisang bilis buong laro, walang gamit), Deadline (40 hanay), Bagyo (putik mula sa ilalim), Karera (2 minuto, pinakamataas na kita), Daily (parehong piraso para sa lahat ngayong araw), Proyekto (30 kontrata, 1–3 bituin).</li>
         <li><b>Laban:</b> ang well mo at ang sa kalaban, magkatabi. Bawat clear ay nagpapadala ng putik (2 hanay = 1, 3 = 2, Bayanihan = 4, T-spin double = 4, may dagdag ang sunod-sunod at combo). Ang paparating na putik (mga sako sa tabi ng well) ay nahaharang ng sarili mong clear. Talunin ang anim sa Liga ng Barangay.</li>
         <li><b>Tapatan (2P, desktop):</b> dalawang tao sa isang keyboard (P1: A D S W, Q E, C; P2: mga arrow, , . /) o may controller. Pinakamahusay sa tatlo; may handicap sa padala at sa simulang taas.</li>
         <li><b>Proyekto Kabanata 2:</b> brownout (flashlight lang), hangin (dumudulas ang piraso), bitak (gumuguho ang bloke), Lunes (walang kawayan), limitadong gamit, at ang City Inspector na nagtatatak ng REJECTED. Linisin ang tatak para may dagdag na oras.</li>

@@ -3,6 +3,7 @@
 // and the queue, Kapatas and his remarks, and the juice: dust, words, and the Bayanihan parade.
 import { COLS, ROWS, HIDDEN, VISIBLE, CLEAR_T, cellsOf, ghostOf } from './game.mjs';
 import { SHAPES, MATERIALS, ID, MUD, CEMENT, REJECTED } from './pieces.mjs';
+import { t as tl } from './i18n.mjs';
 
 export const C = 24, BX = 96, BY = 52, W = 432, H = 560;
 const TYPE_OF = Object.fromEntries(Object.entries(ID).map(([t, v]) => [v, t]));
@@ -101,8 +102,8 @@ export function createRenderer(canvas) {
 
   // ---------- effects ----------
   const emit = (p) => { if (parts.length < (reduced ? 120 : 400)) parts.push({ g: 0, drag: 0.94, size: 2, ...p, max: p.life }); };
-  const popup = (text, x, y, color, size = 16, life = 1.2) => popups.push({ text, x, y, color, size, life, max: life });
-  const say = (k, text) => { if (!text && !SAYS[k]) return; bubble = { text: text || pick(SAYS[k]), life: 2.4 }; }; // the page can hand over its own line
+  const popup = (text, x, y, color, size = 16, life = 1.2) => popups.push({ text: tl(text), x, y, color, size, life, max: life });
+  const say = (k, text) => { if (!text && !SAYS[k]) return; bubble = { text: tl(text || pick(SAYS[k])), life: 2.4 }; }; // the page can hand over its own line
 
   function event(e, g) {
     switch (e.type) {
@@ -118,7 +119,7 @@ export function createRenderer(canvas) {
         popup(word, BX + (COLS * C) / 2, midY - 10, e.n === 4 ? '#ffd23f' : e.spin ? '#ff8ae2' : '#fff8e1', e.n === 4 || e.spin ? 22 : 17, 1.4);
         popup(`+${peso(e.points)}`, BX + (COLS * C) / 2, midY + 14, '#7cf29a', 14, 1.4);
         if (e.b2b) popup('Sunod-sunod! ×1.5', BX + (COLS * C) / 2, midY + 34, '#9ad7ff', 12, 1.4);
-        if (e.combo > 0) popup(`Tuloy-tuloy ×${e.combo}`, BX + (COLS * C) / 2, midY - 34, '#ffb36b', 13, 1.2);
+        if (e.combo > 0) popup(tl('Tuloy-tuloy ×{n}', { n: e.combo }), BX + (COLS * C) / 2, midY - 34, '#ffb36b', 13, 1.2);
         if (e.n === 4) { say('four'); parade = { t: 0 }; flash = reduced ? 0 : 0.35; shake = reduced ? 0 : 6; }
         else if (e.spin) say('tspin');
         else if (e.combo >= 2) say('combo');
@@ -126,7 +127,7 @@ export function createRenderer(canvas) {
         break;
       }
       case 'tspin': popup('T-SPIN!', BX + (COLS * C) / 2, BY + 160, '#ff8ae2', 18); break;
-      case 'levelUp': popup(`Palapag ${e.level}!`, BX + (COLS * C) / 2, BY + 120, '#ffd23f', 22, 1.8); say('level'); break;
+      case 'levelUp': popup(tl('Palapag {n}!', { n: e.level }), BX + (COLS * C) / 2, BY + 120, '#ffd23f', 22, 1.8); say('level'); break;
       case 'rise': if (Math.random() < 0.35) say('rise'); for (let x = 0; x < COLS; x++) emit({ x: BX + x * C + C / 2, y: BY + VISIBLE * C, vx: rnd(-20, 20), vy: rnd(-60, -20), life: 0.5, color: 'rgba(120,100,70,0.8)', size: 3 }); shake = reduced ? 0 : 2; break;
       case 'gameover': say('over'); shake = reduced ? 0 : 5; break;
       case 'done': popup('TAPOS! Deadline met!', BX + (COLS * C) / 2, BY + 200, '#7cf29a', 20, 2.4); break;
@@ -241,26 +242,26 @@ export function createRenderer(canvas) {
     ctx.textBaseline = 'middle';
     // top bar
     ctx.fillStyle = 'rgba(18,16,24,0.82)'; ctx.fillRect(0, 0, W, 40);
-    ctx.textAlign = 'left'; ctx.fillStyle = '#cfc6b4'; ctx.font = FONT(700, 10); ctx.fillText('KITA', 12, 12);
+    ctx.textAlign = 'left'; ctx.fillStyle = '#cfc6b4'; ctx.font = FONT(700, 10); ctx.fillText(tl('KITA'), 12, 12);
     ctx.fillStyle = '#ffd23f'; ctx.font = FONT(800, 18); ctx.fillText(peso(g.score), 12, 28);
-    ctx.textAlign = 'center'; ctx.fillStyle = '#fff8e1'; ctx.font = FONT(800, 15); ctx.fillText(g.modeDef.name.toUpperCase(), W / 2, 14);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#fff8e1'; ctx.font = FONT(800, 15); ctx.fillText(tl(g.modeDef.name).toUpperCase(), W / 2, 14);
     ctx.fillStyle = '#9ad7ff'; ctx.font = FONT(700, 11);
-    ctx.fillText(g.mode === 'deadline' ? `${Math.max(0, 40 - g.lines)} hanay pa` : `Palapag ${g.level} · ${g.lines} hanay`, W / 2, 30);
-    ctx.textAlign = 'right'; ctx.fillStyle = '#cfc6b4'; ctx.font = FONT(700, 10); ctx.fillText(g.mode === 'deadline' ? 'ORAS' : 'BEST', W - 12, 12);
+    ctx.fillText(g.mode === 'deadline' ? tl('{n} hanay pa', { n: Math.max(0, 40 - g.lines) }) : tl('Palapag {f} · {n} hanay', { f: g.level, n: g.lines }), W / 2, 30);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#cfc6b4'; ctx.font = FONT(700, 10); ctx.fillText(g.mode === 'deadline' ? tl('ORAS') : 'BEST', W - 12, 12);
     ctx.fillStyle = '#ff8ae2'; ctx.font = FONT(800, 18);
     ctx.fillText(g.mode === 'deadline' ? clock(g.elapsed) : peso(Math.max(best, g.score)), W - 12, 28);
     // the hold, on the left
     const box = (x, y, w, h, label) => {
       ctx.fillStyle = 'rgba(18,16,24,0.7)'; ctx.beginPath(); ctx.roundRect(x, y, w, h, 8); ctx.fill();
       ctx.strokeStyle = 'rgba(255,210,63,0.35)'; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.fillStyle = '#cfc6b4'; ctx.font = FONT(800, 10); ctx.textAlign = 'center'; ctx.fillText(label, x + w / 2, y + 10);
+      ctx.fillStyle = '#cfc6b4'; ctx.font = FONT(800, 10); ctx.textAlign = 'center'; ctx.fillText(tl(label), x + w / 2, y + 10);
     };
     box(8, BY, 76, 70, 'IMBAK');
     if (g.hold) boxed(g.hold, 46, BY + 42, 15, g.holdUsed ? 0.35 : 1);
-    if (g.hold) { ctx.fillStyle = '#fff8e1'; ctx.font = FONT(700, 9); ctx.fillText(MATERIALS[g.hold].name, 46, BY + 64); }
+    if (g.hold) { ctx.fillStyle = '#fff8e1'; ctx.font = FONT(700, 9); ctx.fillText(tl(MATERIALS[g.hold].name), 46, BY + 64); }
     box(8, BY + 80, 76, g.mode === 'bagyo' ? 116 : 96, 'TALA');
     ctx.textAlign = 'left'; ctx.font = FONT(700, 10); ctx.fillStyle = '#fff8e1';
-    const stats = [['Oras', clock(g.elapsed)], ['Bayanihan', g.stats.bayanihan], ['T-spin', g.stats.tspins], ['Combo', Math.max(0, g.stats.maxCombo)]];
+    const stats = [[tl('Oras'), clock(g.elapsed)], ['Bayanihan', g.stats.bayanihan], ['T-spin', g.stats.tspins], ['Combo', Math.max(0, g.stats.maxCombo)]];
     if (g.mode === 'bagyo' && g.rise) stats.push(['Baha', `${Math.ceil(g.rise.t / 60)}s`]);
     stats.forEach(([k, v], i) => { ctx.fillStyle = '#cfc6b4'; ctx.textAlign = 'left'; ctx.fillText(k, 14, BY + 102 + i * 18); ctx.fillStyle = '#fff8e1'; ctx.textAlign = 'right'; ctx.fillText(String(v), 78, BY + 102 + i * 18); });
     // the queue, on the right
@@ -360,8 +361,8 @@ export function createRenderer(canvas) {
     }
     if (g.phase === 'ready') {
       ctx.fillStyle = 'rgba(18,16,24,0.75)'; ctx.fillRect(BX, BY + 200, COLS * C, 70);
-      ctx.font = FONT(800, 24); ctx.fillStyle = '#ffd23f'; ctx.fillText(g.modeDef.name.toUpperCase(), BX + (COLS * C) / 2, BY + 230);
-      ctx.font = FONT(700, 13); ctx.fillStyle = '#fff8e1'; ctx.fillText(g.mode === 'deadline' ? '40 hanay, bilisan!' : g.mode === 'bagyo' ? 'Tumataas ang baha!' : 'Buuin ang bahay!', BX + (COLS * C) / 2, BY + 254);
+      ctx.font = FONT(800, 24); ctx.fillStyle = '#ffd23f'; ctx.fillText(tl(g.modeDef.name).toUpperCase(), BX + (COLS * C) / 2, BY + 230);
+      ctx.font = FONT(700, 13); ctx.fillStyle = '#fff8e1'; ctx.fillText(tl(g.mode === 'deadline' ? '40 hanay, bilisan!' : g.mode === 'bagyo' ? 'Tumataas ang baha!' : 'Buuin ang bahay!'), BX + (COLS * C) / 2, BY + 254);
     }
     ctx.textAlign = 'left';
   }

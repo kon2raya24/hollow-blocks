@@ -1,4 +1,5 @@
 import { TOOLS } from './game.mjs';
+import { t as tl } from './i18n.mjs';
 // Progression, pure: XP from every game, the ranks (Peon to Arkitekto), the medals, the house styles
 // each rank unlocks, the stats, and the Daily's date seed and spoiler-free share text.
 export const RANKS = [
@@ -53,9 +54,9 @@ export function dailySeed(key) {
   return h % 1e9;
 }
 // a share line with no spoilers: the score and lines, and a row of blocks for how it went
-export function shareText(key, r) {
+export function shareText(key, r, url = true) { // url: off on a portal (no links out)
   const bricks = Math.max(1, Math.min(10, Math.round(r.lines / 4)));
-  return `Hollow Blocks Daily ${key}\n₱${Math.floor(r.score).toLocaleString('en-US')} · ${r.lines} hanay${r.bayanihan ? ` · ${r.bayanihan}× Bayanihan` : ''}\n${'🧱'.repeat(bricks)}\nhttps://hollow-blocks.vercel.app`;
+  return `Hollow Blocks Daily ${key}\n₱${Math.floor(r.score).toLocaleString('en-US')} · ${tl('{n} hanay', { n: r.lines })}${r.bayanihan ? ` · ${r.bayanihan}× Bayanihan` : ''}\n${'🧱'.repeat(bricks)}${url ? '\nhttps://hollow-blocks.vercel.app' : ''}`;
 }
 
 // ---------- tools by rank: the plumada at Kapatas, the barena at Inhinyero, the andamyo at Arkitekto ----------
@@ -87,7 +88,7 @@ export function weeklyEvent(now = Date.now()) {
   const ends = mondayOf(now) + 7 * DAY - 8 * 3600e3; // next Monday, midnight in Manila
   return { ...ev, week: isoWeek(now), ends, left: ends - now, next: EVENTS[(((n + 1) % EVENTS.length) + EVENTS.length) % EVENTS.length] };
 }
-export function countdown(ms) { const s = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60); return d ? `${d}a ${h}o` : h ? `${h}o ${m}m` : `${m}m ${s % 60}s`; }
+export function countdown(ms) { const s = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60); return d ? tl('{d}a {h}o', { d, h }) : h ? tl('{h}o {m}m', { h, m }) : `${m}m ${s % 60}s`; } // a: araw (days), o: oras (hours)
 
 // ---------- the daily login streak: a day more each day you come back (Manila dates), one grace day
 // that covers a single missed day, and a bonus that grows to the seventh day ----------

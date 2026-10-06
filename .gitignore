@@ -2,3 +2,6 @@
 .scratch
 # the Mixamo foreman: shipped inside the Vercel deploy, not in the repo
 assets/people/
+
+# portal builds (tools/portal.mjs)
+dist/

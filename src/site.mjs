@@ -8,6 +8,7 @@ import * as THREE from './vendor/three.module.min.js';
 import { mergeGeometries } from './vendor/three-extra.min.js';
 import * as T from './tex.mjs';
 import { CS } from './blocks.mjs';
+import { t as tl } from './i18n.mjs';
 
 export const BASE_Y = 0.2; // the bottom of the well: on a sole board on the slab
 export const WELL = { x0: -2.5, x1: 2.5, y0: BASE_Y, y1: BASE_Y + 20 * CS, top: BASE_Y + 22 * CS };
@@ -203,7 +204,7 @@ export function buildSite(scene, { low = false } = {}) {
   const boards = {};
   const mkBoard = (id, word, w, h) => {
     const g = new THREE.Group();
-    const face = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.04), [plank, plank, plank, plank, new THREE.MeshStandardMaterial({ map: boardTex(word, w, h), roughness: 0.85 }), plank]);
+    const face = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.04), [plank, plank, plank, plank, new THREE.MeshStandardMaterial({ map: boardTex(tl(word), w, h), roughness: 0.85 }), plank]);
     face.castShadow = true; face.receiveShadow = true; g.add(face);
     // two outrigger pipes back to the standards
     g.userData.pipes = [0, 1].map(() => { const p = mesh(new THREE.CylinderGeometry(0.02, 0.02, 1, 8), steel); dyn.add(p); return p; });
@@ -230,7 +231,7 @@ export function buildSite(scene, { low = false } = {}) {
     x.fillStyle = '#1e2a24'; x.fillRect(0, 0, W, Hh);
     for (let k = 0; k < 500; k++) { x.fillStyle = `rgba(255,255,255,${Math.random() * 0.04})`; x.fillRect(Math.random() * W, Math.random() * Hh, 3, 2); }
     x.strokeStyle = '#a07a4a'; x.lineWidth = 16; x.strokeRect(8, 8, W - 16, Hh - 16);
-    x.fillStyle = '#ffd23f'; x.font = 'italic 900 50px "Barlow Condensed", sans-serif'; x.textAlign = 'center'; x.fillText('TALA', W / 2, 66);
+    x.fillStyle = '#ffd23f'; x.font = 'italic 900 50px "Barlow Condensed", sans-serif'; x.textAlign = 'center'; x.fillText(tl('TALA'), W / 2, 66);
     x.font = '700 38px "Baloo 2", sans-serif';
     rows.forEach(([k, v], i) => { const y = 128 + i * 64; x.textAlign = 'left'; x.fillStyle = 'rgba(240,236,220,0.78)'; x.fillText(k, 34, y); x.textAlign = 'right'; x.fillStyle = '#fffbe8'; x.fillText(String(v), W - 34, y); x.fillStyle = 'rgba(255,255,255,0.07)'; x.fillRect(30, y + 16, W - 60, 2); });
     tallyTex.needsUpdate = true;

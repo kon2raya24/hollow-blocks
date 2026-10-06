@@ -1,6 +1,7 @@
 // Proyekto: fifteen contracts across three barangays. Each is a job order from Kapatas: a goal, a
 // twist, a par for the stars. Finishing earns one star; beating the par for two and three earns more.
 // Pure data and maths, so the tests can check every goal and every threshold.
+import { t } from './i18n.mjs';
 const MIN = 60 * 60, SEC = 60;
 // Pars come from the bot playing every contract at a strong human's pace (8 ticks between keys,
 // about 1.3 pieces a second): three stars is about its time; two is a comfortable, steady game.
@@ -84,26 +85,26 @@ export const brgyStars = (progress, b) => CONTRACTS.filter((c) => c.brgy === b).
 // the description of a contract's goal and twist, for its card
 export function describe(c) {
   const q = c.goal, out = [];
-  if (q.lines) out.push(`${q.lines} hanay`);
+  if (q.lines) out.push(t('{n} hanay', { n: q.lines }));
   if (q.tspins) out.push(`${q.tspins} T-spin`);
   if (q.bayanihan) out.push(`${q.bayanihan} Bayanihan`);
   if (q.combo) out.push(`combo ×${q.combo}`);
   if (q.score) out.push(`₱${q.score.toLocaleString('en-US')}`);
-  if (q.survive) out.push(`tumagal ${q.survive / 3600 >= 1 ? `${q.survive / 3600} min` : `${q.survive / 60} s`}`);
-  if (q.garbage) out.push('linisin ang kalat');
+  if (q.survive) out.push(t('tumagal {d}', { d: q.survive / 3600 >= 1 ? `${q.survive / 3600} min` : `${q.survive / 60} s` }));
+  if (q.garbage) out.push(t('linisin ang kalat'));
   const tw = [];
   if (c.limit) tw.push(`⏱ ${Math.floor(c.limit / 3600)}:${String((c.limit / 60) % 60).padStart(2, '0')}`);
-  if (c.holdLimit !== undefined) tw.push(c.holdLimit === 0 ? 'walang imbak' : `${c.holdLimit} imbak lang`);
-  if (c.rise) tw.push('tumataas ang putik');
-  if (c.lindol) tw.push('lindol');
-  if (c.startLevel) tw.push(`ika-${c.startLevel} palapag`);
+  if (c.holdLimit !== undefined) tw.push(c.holdLimit === 0 ? t('walang imbak') : t('{n} imbak lang', { n: c.holdLimit }));
+  if (c.rise) tw.push(t('tumataas ang putik'));
+  if (c.lindol) tw.push(t('lindol'));
+  if (c.startLevel) tw.push(t('ika-{n} palapag', { n: c.startLevel }));
   if (c.brownout) tw.push('brownout');
-  if (c.wind) tw.push('hangin');
-  if (c.bitak) tw.push(`bitak bawat ${c.bitak.every}`);
-  if (c.noI) tw.push('walang kawayan');
-  if (c.startTools) tw.push(`gamit: ${c.startTools.join(', ')} lang`);
+  if (c.wind) tw.push(t('hangin'));
+  if (c.bitak) tw.push(t('bitak bawat {n}', { n: c.bitak.every }));
+  if (c.noI) tw.push(t('walang kawayan'));
+  if (c.startTools) tw.push(t('gamit: {g} lang', { g: c.startTools.map((x) => t(x[0].toUpperCase() + x.slice(1))).join(', ') }));
   if (c.inspector) tw.push('City Inspector');
-  if (c.tools === false) tw.push('walang gamit');
-  const s = c.star, unit = s.by === 'time' ? 's' : s.by === 'pieces' ? ' piraso' : s.by === 'lines' ? ' hanay' : '';
+  if (c.tools === false) tw.push(t('walang gamit'));
+  const s = c.star, unit = s.by === 'time' ? 's' : s.by === 'pieces' ? ` ${t('piraso')}` : s.by === 'lines' ? ` ${t('hanay')}` : '';
   return { goal: out.join(' · '), twist: tw.join(' · '), par: `★★ ${s.by === 'time' || s.by === 'pieces' ? '≤' : '≥'} ${s.two}${unit} · ★★★ ${s.by === 'time' || s.by === 'pieces' ? '≤' : '≥'} ${s.three}${unit}` };
 }

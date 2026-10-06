@@ -20,6 +20,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { COLS, ROWS, HIDDEN, CLEAR_T, READY, cellsOf, ghostOf } from './game.mjs';
 import { SHAPES } from './pieces.mjs';
+import { t as lang18 } from './i18n.mjs'; // (t and tl are taken here: the clock, a vector)
 import { CS, KEYS, TYPE_KEY, FEEL, makeMaterials, blockGeometry, ghostTexture, GHOST_COLORS, skinMaterials } from './blocks.mjs';
 import { buildTheme, THEMES } from './themes.mjs';
 import { buildSite, WELL, BASE_Y } from './site.mjs';
@@ -376,7 +377,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
           fx.bar(0, midY, 0.4, 5.6, CS * 0.35 * e.rows.length, '#ffc040', 0.35, { grow: 2.4 });
         }
         if (e.b2b && !opts.pops) fx.callout('SUNOD-SUNOD ×1.5', 0, midY - 1.2, 1.2, { color: 'blue', height: 0.52, life: 1.3, delay: 0.16 });
-        if (e.combo > 0 && !opts.pops) fx.callout(`TULOY-TULOY ×${e.combo}`, 0, midY + 1.3, 1.2, { color: 'orange', height: 0.56, life: 1.2, delay: 0.12 });
+        if (e.combo > 0 && !opts.pops) fx.callout(lang18('TULOY-TULOY ×{n}', { n: e.combo }), 0, midY + 1.3, 1.2, { color: 'orange', height: 0.56, life: 1.2, delay: 0.12 });
         if (!reduced) { kickV -= 0.03 + e.n * 0.018; flashK = Math.max(flashK, e.n === 4 ? 0.28 : e.spin ? 0.14 : 0); }
         if (e.n === 4) {
           reactKapatas('victory'); cheerT = 3.5;
@@ -406,7 +407,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         if (!reduced) { kickV -= 0.03; flashK = Math.max(flashK, 0.08); }
         break;
       }
-      case 'passed': if (!opts.pops) fx.callout(`PASADO +${3 * e.n}s`, 0, WELL.top - 2, 1.3, { color: 'green', height: 0.6, life: 1.2 }); break;
+      case 'passed': if (!opts.pops) fx.callout(lang18('PASADO +{n}s', { n: 3 * e.n }), 0, WELL.top - 2, 1.3, { color: 'green', height: 0.6, life: 1.2 }); break;
       case 'lights': if (e.on) { if (!opts.pops) fx.callout('MAY ILAW NA!', 0, WELL.top - 1.6, 1.3, { color: 'gold', height: 0.6, life: 1 }); if (!reduced) flashK = Math.max(flashK, 0.1); } else fx.callout('BROWNOUT!', 0, WELL.top - 1.6, 1.3, { color: 'blue', height: 0.8, life: 1.2 }); break;
       case 'wind': case 'gust': {
         const d = e.dir;
@@ -419,7 +420,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       case 'garbage': {
         riseT = 1; orient = shiftUp(orient, e.rows);
         for (let x = 0; x < COLS; x++) { fx.puff(cx(x), BASE_Y + 0.1, 0.4, '#6a5038', { size: rnd(0.3, 0.6), vy: rnd(0.4, 1.4), vz: rnd(0.4, 1.4), life: 0.9, a: 0.6 }); fx.chunk('putik', cx(x) + rnd(-0.2, 0.2), BASE_Y + 0.2, 0.3, rnd(-1.2, 1.2), rnd(1.5, 3.5), rnd(0.5, 2), rnd(0.03, 0.06)); }
-        if (!opts.pops) fx.callout(`+${e.rows} PUTIK`, 0, cy(ROWS - e.rows) + 0.4, 1.2, { color: 'orange', height: 0.7, life: 1.2 });
+        if (!opts.pops) fx.callout(lang18('+{n} PUTIK', { n: e.rows }), 0, cy(ROWS - e.rows) + 0.4, 1.2, { color: 'orange', height: 0.7, life: 1.2 });
         if (!reduced) kickV -= 0.04 + e.rows * 0.01;
         reactKapatas('cheer'); kap.react = 'worry'; kap.reactT = 1.4;
         break;
@@ -437,7 +438,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
         break;
       }
       case 'toolEarned': {
-        fx.callout(`+ ${e.tool.toUpperCase()}`, WELL.x0 - 0.6, WELL.y1 - 1, 1.4, { color: 'gold', height: 0.6, life: 1.6, rise: 1.2 });
+        fx.callout(`+ ${lang18(e.tool[0].toUpperCase() + e.tool.slice(1)).toUpperCase()}`, WELL.x0 - 0.6, WELL.y1 - 1, 1.4, { color: 'gold', height: 0.6, life: 1.6, rise: 1.2 });
         for (let k = 0; k < 24; k++) fx.spark(rnd(-2.5, 2.5), rnd(1, 9), 0.4, '#ffd27a', { vx: rnd(-1, 1), vy: rnd(1, 3), vz: rnd(0, 1), size: 0.06, grow: 0, life: 0.6, a: 1, grav: 0.3 });
         break;
       }
@@ -507,8 +508,8 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     const sx = from ? rig.RX : 0, tx = from ? WELL.x0 - 0.4 : rig.RX + (WELL.x0 - 0.4) * rig.S, y0 = from ? ry(8) : cy(8);
     // (the rival's side sits forward, on its deck)
     for (let k = 0; k < Math.min(24, 4 + n * 3); k++) fx.chunk('putik', sx + rnd(-1, 1), y0 + rnd(-1, 1), 0.6, (tx - sx) * rnd(0.55, 0.8), rnd(2.5, 5), rnd(0.3, 1.2), rnd(0.05, 0.1));
-    if (n > 0 && !(from && opts.pops)) fx.callout(`+${n} PUTIK`, from ? WELL.x0 - 0.4 : tx, (from ? cy(14) : ry(14)), from ? 1.3 : rig.Z + 1.3, { color: 'orange', height: from ? 0.62 : 0.62 * Math.max(0.7, rig.S), life: 1.4, delay: 0.25 });
-    if (cancelled > 0 && (from || !opts.pops)) fx.callout(`HARANG ${cancelled}`, from ? rig.RX : 0, (from ? ry(6) : cy(6)), 1.3, { color: 'blue', height: 0.5, life: 1.1, delay: 0.1 });
+    if (n > 0 && !(from && opts.pops)) fx.callout(lang18('+{n} PUTIK', { n }), from ? WELL.x0 - 0.4 : tx, (from ? cy(14) : ry(14)), from ? 1.3 : rig.Z + 1.3, { color: 'orange', height: from ? 0.62 : 0.62 * Math.max(0.7, rig.S), life: 1.4, delay: 0.25 });
+    if (cancelled > 0 && (from || !opts.pops)) fx.callout(lang18('HARANG {n}', { n: cancelled }), from ? rig.RX : 0, (from ? ry(6) : cy(6)), 1.3, { color: 'blue', height: 0.5, life: 1.1, delay: 0.1 });
   }
   function setVersus(on, prof = null) {
     if (on && !rig) rig = buildRivalRig(scene);
@@ -694,7 +695,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       const gapR = N > 5 ? 0.48 : 0.6, gapC = N > 5 ? 0.118 : 0.148, sc = N > 5 ? 0.86 : 1;
       if (nb.row) slots.forEach((type, i) => mini(type, nb.cx - nb.w * 0.36 + (i === 0 ? 0 : 0.75 + (i - 1) * gapR), nb.cy - nb.h * 0.08, (i === 0 ? 0.42 : 0.27 * sc) * (i === 0 ? 1 + spawnT * 0.08 : 1), i === 0 ? 1 : 0.88, i === 0 ? 0.1 : 0));
       else slots.forEach((type, i) => mini(type, nb.cx, top0 - (i === 0 ? 0 : nb.h * 0.08 + i * nb.h * gapC), (i === 0 ? hs : hs * 0.78 * sc) * (i === 0 ? 1 + spawnT * 0.08 : 1), i === 0 ? 1 : 0.88, i === 0 ? 0.1 : 0));
-      site.drawTally(g.mode === 'bagyo' && g.rise ? [['Oras', fmt(g.elapsed)], ['Bayanihan', g.stats.bayanihan], ['T-spin', g.stats.tspins], ['Baha', `${Math.ceil(g.rise.t / 60)}s`]] : [['Oras', fmt(g.elapsed)], ['Bayanihan', g.stats.bayanihan], ['T-spin', g.stats.tspins], ['Combo', Math.max(0, g.stats.maxCombo)]]);
+      site.drawTally(g.mode === 'bagyo' && g.rise ? [[lang18('Oras'), fmt(g.elapsed)], ['Bayanihan', g.stats.bayanihan], ['T-spin', g.stats.tspins], [lang18('Baha'), `${Math.ceil(g.rise.t / 60)}s`]] : [[lang18('Oras'), fmt(g.elapsed)], ['Bayanihan', g.stats.bayanihan], ['T-spin', g.stats.tspins], ['Combo', Math.max(0, g.stats.maxCombo)]]);
     }
     toolbox.instanceMatrix.needsUpdate = true; toolbox.visible = toolbox.count > 0;
     cracks.instanceMatrix.needsUpdate = true; cracks.visible = cracks.count > 0;
@@ -741,7 +742,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     else if (o.mode === 'results') {
       target = shots.results(t); rate = 1.6;
       if (cam.mode !== 'results') fx.clear();
-      if (cam.mode !== 'results' && g && camera.aspect > 1.1) { const h = site.house.group.position, n = 1 + Math.floor(g.lines / 10); fx.callout(`${n} PALAPAG`, h.x, site.house.top() + 1.6, h.z + 3, { color: 'gold', height: 2.1, life: 60, rise: 0.3, delay: 0.2 }); }
+      if (cam.mode !== 'results' && g && camera.aspect > 1.1) { const h = site.house.group.position, n = 1 + Math.floor(g.lines / 10); fx.callout(lang18('{n} PALAPAG', { n }), h.x, site.house.top() + 1.6, h.z + 3, { color: 'gold', height: 2.1, life: 60, rise: 0.3, delay: 0.2 }); }
     }
     else { target = shots.title(t); rate = cam.mode === 'title' ? 1 : 1.2; }
     // coming from another shot, ease into the play framing instead of jumping (then it holds still)

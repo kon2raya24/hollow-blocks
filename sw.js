@@ -1,11 +1,11 @@
 // Offline play: the game's own files (three.js and the sounds included) are cached on install and
 // served cache-first; the webfont, the scanned site (assets/env) and the foreman (assets/people, on the
 // Vercel deploy) are cached the first time they load. Bump VERSION whenever a file changes.
-const VERSION = 'hollowblocks-v25';
+const VERSION = 'hollowblocks-v26';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
-  'src/audio.mjs', 'src/blocks.mjs', 'src/bot.mjs', 'src/contracts.mjs', 'src/icons.mjs', 'src/progress.mjs', 'src/toolfx.mjs', 'src/versus.mjs', 'src/replay.mjs', 'src/training.mjs', 'src/rival3d.mjs', 'src/controls.mjs', 'src/inspector3d.mjs', 'src/shop.mjs', 'src/cheat.mjs', 'src/haptics.mjs', 'src/voice.mjs', 'src/themes.mjs', 'src/online.mjs', 'src/pow.mjs', 'src/ads.mjs', 'src/googleads.mjs', 'src/crowd.mjs', 'src/envpack.mjs', 'src/folk.mjs', 'src/foreman.mjs', 'src/fx.mjs', 'src/game.mjs', 'src/main.mjs', 'src/pieces.mjs', 'src/post.mjs', 'src/render.mjs', 'src/rng.mjs', 'src/site.mjs', 'src/tex.mjs', 'src/view3d.mjs',
+  'src/audio.mjs', 'src/blocks.mjs', 'src/bot.mjs', 'src/contracts.mjs', 'src/icons.mjs', 'src/progress.mjs', 'src/toolfx.mjs', 'src/versus.mjs', 'src/replay.mjs', 'src/training.mjs', 'src/rival3d.mjs', 'src/controls.mjs', 'src/inspector3d.mjs', 'src/shop.mjs', 'src/cheat.mjs', 'src/i18n.mjs', 'src/lang-en.mjs', 'src/portal.mjs', 'src/crazy.mjs', 'src/haptics.mjs', 'src/voice.mjs', 'src/themes.mjs', 'src/online.mjs', 'src/pow.mjs', 'src/ads.mjs', 'src/googleads.mjs', 'src/crowd.mjs', 'src/envpack.mjs', 'src/folk.mjs', 'src/foreman.mjs', 'src/fx.mjs', 'src/game.mjs', 'src/main.mjs', 'src/pieces.mjs', 'src/post.mjs', 'src/render.mjs', 'src/rng.mjs', 'src/site.mjs', 'src/tex.mjs', 'src/view3d.mjs',
   'src/vendor/three.module.min.js', 'src/vendor/three-fx.min.js', 'src/vendor/three-mocap.min.js', 'src/vendor/three-extra.min.js',
   'assets/sfx/bell0.mp3', 'assets/sfx/bell1.mp3', 'assets/sfx/bell2.mp3', 'assets/sfx/glass0.mp3', 'assets/sfx/glass1.mp3', 'assets/sfx/glass2.mp3', 'assets/sfx/heavy0.mp3', 'assets/sfx/heavy1.mp3', 'assets/sfx/heavy2.mp3', 'assets/sfx/metal0.mp3',
   'assets/sfx/metal1.mp3', 'assets/sfx/metal2.mp3', 'assets/sfx/mining0.mp3', 'assets/sfx/mining1.mp3', 'assets/sfx/mining2.mp3', 'assets/sfx/plank0.mp3', 'assets/sfx/plank1.mp3', 'assets/sfx/plank2.mp3', 'assets/sfx/plate0.mp3', 'assets/sfx/plate1.mp3',

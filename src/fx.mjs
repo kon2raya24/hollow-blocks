@@ -4,6 +4,7 @@
 // pesos earned), lettered in gold and popping up where it happened.
 import * as THREE from './vendor/three.module.min.js';
 import { chunkGeometry } from './blocks.mjs';
+import { t as tl } from './i18n.mjs';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const TAU = Math.PI * 2;
@@ -158,7 +159,7 @@ export function createFx(scene, mats, { floorY = 0 } = {}) {
   }
   const calls = [];
   function callout(text, x, y, z, { color = 'gold', height = 0.9, life = 1.3, delay = 0, rise = 0.8 } = {}) {
-    const { t, aspect } = textTex(text, { color });
+    const { t, aspect } = textTex(tl(text), { color }); // the words in the player's language
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
     s.renderOrder = 20; s.position.set(x, y, z); s.visible = false; group.add(s);
     calls.push({ s, t: -delay, life, h: height, aspect, y0: y, rise });
