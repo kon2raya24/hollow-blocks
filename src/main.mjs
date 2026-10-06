@@ -26,6 +26,7 @@ import { xpFor, rankOf, RANKS, STYLES, styleOpen, MEDALS, newMedals, addStats, d
 const Q = new URLSearchParams(location.search);
 const TEST = Q.get('test') === '1';
 const AUTOPLAY = TEST && Q.get('autoplay') === '1';
+const CAPTURE = TEST && Q.get('capture') === '1'; // frames by hand (__hb.advance), for recording the trailer
 const KEY = 'hollowblocks.v1';
 const store = {
   get() { if (TEST) return null; try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } },
@@ -1594,7 +1595,7 @@ function frame(now) {
   readPad(dt);
   if (PORTAL) crazyPlay(mode === 'play' && !!game && !document.hidden); // the portal counts play time
   if (game && mode === 'play') {
-    const input = AUTOPLAY ? bot(game, { pace: Number(Q.get('pace')) || 2 }) : { pressed, held: [...held] };
+    const input = AUTOPLAY ? bot(game, { pace: Number(Q.get('pace')) || 2, style: Q.get('style') || null }) : { pressed, held: [...held] };
     pressed = [];
     // the rules' short pauses stretch to fit the shots: the establishing swoop as the game begins, and
     // a Bayanihan or a new floor while the rows clear. No piece is in play during either.
@@ -1663,7 +1664,7 @@ function frame(now) {
   } else R.draw(g, t, { reduced: reduced(), best: game ? data.best[bestKey()] || 0 : 0, rival: rivalG, hint: lessonHint(), plumb: plumbHint(), next: nextN });
   keepClear(dt);
   A.update(g, (!!game && mode === 'play') || (!!viewer && !viewer.paused), dt);
-  requestAnimationFrame(frame);
+  if (!CAPTURE) requestAnimationFrame(frame);
 }
 
 async function boot() {
@@ -1694,7 +1695,7 @@ async function boot() {
   if (!PORTAL) setTimeout(startAds, 3000); // a portal brings its own ads (or none)
   else { crazyLoading(true); initCrazy().then(() => { crazyLoading(true); if (window.__loaded) crazyLoading(false); }); }
   try { if (sessionStorage.getItem('hollowblocks.restored')) { sessionStorage.removeItem('hollowblocks.restored'); setTimeout(() => toast(tr('Naibalik ang progreso ni {n} · Progress restored', { n: online.user }), 3200), 900); } } catch { /* no session storage */ }
-  requestAnimationFrame((n) => { last = n; requestAnimationFrame(frame); });
+  if (!CAPTURE) requestAnimationFrame((n) => { last = n; requestAnimationFrame(frame); });
   setTimeout(() => $('curtain').classList.add('off'), 250);
   if (view) {
     // the real site and the real foreman load in the background; a bar shows how far along
@@ -1716,7 +1717,9 @@ async function boot() {
     const fastTap = (n) => { for (let k = 0; k < n; k++) { if (!match || mode !== 'play' || match.phase !== 'play') break; onMatch(matchStep(match, bot(match.a, { pace: 4 }), 1 / 60, null, bot(match.b, { pace: 6, style: 'tetris' }))); if (view && k % 20 === 19) view.frame(game, 1 / 3, { mode: 'play', reduced: reduced(), cine: false, ghost: true, rival: match.b, p2: true, next: data.rules.next }); } return match && match.tick; };
     // the same for a match: the bot plays your well too
     const fastVs = (n) => { for (let k = 0; k < n; k++) { if (!match || mode !== 'play' || match.phase !== 'play') break; const out = matchStep(match, bot(match.a, { pace: 4 }), 1 / 60, (inp) => { if (rec) record(rec, inp); }); onMatch(out); if (view && k % 20 === 19) view.frame(game, 1 / 3, { mode: 'play', reduced: reduced(), cine: false, ghost: true, rival: match.b, next: data.rules.next }); } return match && match.tick; };
-    window.__hb = { live, wellBox, online, openAccount, offerDouble, shopOffers, openRanking, openModes, openShop, openBook, openHouse, get houses() { return houses; }, recordHouse, labels, V, wearLooks, job: (id) => openBrief(contractById(id)), fastTap, openTapatan, get tap() { return tap; }, tapIn, openMap, weeklyBanner, inspSays, fast, fastVs, A, get game() { return game; }, get match() { return match; }, get mode() { return mode; }, get demo() { return demo; }, get viewer() { return viewer; }, get coach() { return coach; }, get ghost() { return ghost; }, replays, start, get view() { return view; }, pause, resume, openSettings: () => openSettings(mode === 'pause' ? 'pause' : 'title'), openKeys, openVs, openRival, openLessons, openLesson: (id) => openLesson(lessonById(id)), openReplays, watch, encodeLast: async () => rec && encode(rec), keepReplay: () => keepReplay(game, true), data, showFinesse, setRec: (r) => { rec = r; } };
+    let capNow = performance.now(); last = capNow;
+    const advance = (ms) => { capNow += ms; frame(capNow); }; // one frame of the given length (capture=1)
+    window.__hb = { advance, live, wellBox, online, openAccount, offerDouble, shopOffers, openRanking, openModes, openShop, openBook, openHouse, get houses() { return houses; }, recordHouse, labels, V, wearLooks, job: (id) => openBrief(contractById(id)), fastTap, openTapatan, get tap() { return tap; }, tapIn, openMap, weeklyBanner, inspSays, fast, fastVs, A, get game() { return game; }, get match() { return match; }, get mode() { return mode; }, get demo() { return demo; }, get viewer() { return viewer; }, get coach() { return coach; }, get ghost() { return ghost; }, replays, start, get view() { return view; }, pause, resume, openSettings: () => openSettings(mode === 'pause' ? 'pause' : 'title'), openKeys, openVs, openRival, openLessons, openLesson: (id) => openLesson(lessonById(id)), openReplays, watch, encodeLast: async () => rec && encode(rec), keepReplay: () => keepReplay(game, true), data, showFinesse, setRec: (r) => { rec = r; } };
     if (Q.get('rival')) { vsPick = Q.get('rival'); }
     if (Q.get('lesson')) lesson = lessonById(Q.get('lesson'));
     if (Q.get('difficulty')) data.difficulty = Q.get('difficulty');

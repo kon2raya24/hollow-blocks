@@ -219,6 +219,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
 
   // ---------- the camera ----------
   const cam = { pos: new THREE.Vector3(0, 6, 30), look: new THREE.Vector3(0, 5, 0), fov: 30, mode: 'title', blend: 1, from: null };
+  const debug = { cam, shot: null, bare: false, get play() { return play; }, get site() { return site; }, get fx() { return fx; }, get kap() { return kap; }, get compact() { return compact; }, get insp() { return insp; } }; // shot: [x, y, z, tx, ty, tz, fov] holds the camera there
   const play = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 30 };
   let angled = true, insets = { top: 70, bottom: 20 };
   // Fit the well and its boards to the screen, between the HUD at the top and the buttons at the bottom.
@@ -680,8 +681,9 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       rg.queue.slice(0, 3).forEach((type, i) => mini2(type, rx(9) + 1.6 * S, ry(8.6 + i * 3), (i ? 0.5 : 0.66) * S, i ? 0.85 : 1));
       if (o.ghost !== false) { const gh = ghostOf(rg); if (gh && gh.y !== rg.cur.y) for (const [x, y] of cellsOf(gh)) put(keyOf(rg.cur.type, rg.cur.rot), rx(x), ry(y), rig.Z, S * 0.9, 0, 0.35); }
     }
-    // the hold and the queue, on their boards
-    if (g && layout) {
+    // the hold and the queue, on their boards (a bare set shot has neither: debug.bare)
+    for (const b of Object.values(site.boards)) { b.visible = !debug.bare; for (const p of b.userData.pipes || []) p.visible = !debug.bare; }
+    if (g && layout && !debug.bare) {
       const hb = site.boards.hold.userData.rect, nb = site.boards.next.userData.rect;
       const mini = (type, x, y, s, tint = 1, glow = 0) => {
         const cs = SHAPES[type][0], xs = cs.map((c) => c[0]), ys = cs.map((c) => c[1]);
@@ -750,6 +752,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     if (cam.settle > 0 && rate >= 1 && mode === 'play') { cam.settle -= dt; rate = 7; if (cam.settle <= 0) rate = 1; }
     cam.mode = mode;
     setCam(target, dt, rate);
+    if (debug.shot) { const [x, y, z, tx, ty, tz, fov] = debug.shot; cam.pos.set(x, y, z); cam.look.set(tx, ty, tz); cam.fov = fov || cam.fov; } // a set shot (covers, the trailer)
     camera.position.copy(cam.pos); camera.lookAt(cam.look);
     camera.position.y += kickY;
     if (shake > 0 && !reduced) { camera.position.x += (Math.random() - 0.5) * shake * 0.3; camera.position.y += (Math.random() - 0.5) * shake * 0.3; }
@@ -834,6 +837,6 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
     get cellPx() { return cellPx; }, get cine() { return cine; }, get busy() { return fx.busy; },
     setInsets(top, bottom) { insets = { top, bottom }; fit(); }, setAngled(b) { angled = b; fit(); },
     setShadows(on) { sun.castShadow = on; },
-    debug: { cam, play, site, fx, kap, get compact() { return compact; }, get insp() { return insp; } },
+    debug,
   };
 }
