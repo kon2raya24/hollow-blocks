@@ -682,7 +682,7 @@ export function createView(canvas, { low = false, gfx = null } = {}) {
       if (o.ghost !== false) { const gh = ghostOf(rg); if (gh && gh.y !== rg.cur.y) for (const [x, y] of cellsOf(gh)) put(keyOf(rg.cur.type, rg.cur.rot), rx(x), ry(y), rig.Z, S * 0.9, 0, 0.35); }
     }
     // the hold and the queue, on their boards (a bare set shot has neither: debug.bare)
-    for (const b of Object.values(site.boards)) { b.visible = !debug.bare; for (const p of b.userData.pipes || []) p.visible = !debug.bare; }
+    if (debug.bare) for (const b of Object.values(site.boards)) { b.visible = false; for (const p of b.userData.pipes || []) p.visible = false; } // the layout shows the right ones otherwise
     if (g && layout && !debug.bare) {
       const hb = site.boards.hold.userData.rect, nb = site.boards.next.userData.rect;
       const mini = (type, x, y, s, tint = 1, glow = 0) => {

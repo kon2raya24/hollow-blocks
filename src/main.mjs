@@ -175,8 +175,10 @@ function ruleOpts() {
   if (r.rot180) o.rot180 = true; if (r.hold === false) o.hold = false; if (r.next !== 5) o.next = r.next;
   return Object.keys(o).length ? o : null;
 }
+let whenPlaying = null; // something to load once the first game starts (the portal build's crowd)
 function start() {
   A.start();
+  if (whenPlaying) { const f = whenPlaying; whenPlaying = null; setTimeout(f, 1500); }
   if (!data.safety && !AUTOPLAY && !PORTAL) { mode = 'safety'; show('safety'); return; } // a portal wants play within a click
   if (data.mode === 'proyekto' && !job) { openMap(); return; }
   if (data.mode === 'versus' && !vsPick) { openVs(); return; }
@@ -1706,7 +1708,8 @@ async function boot() {
     loaded();
     import('./envpack.mjs').then(({ loadEnv }) => loadEnv(Q.get('env') || 'assets/env/')).then((e) => { parts.env = 0.5; loaded(); return view.setEnv(e); }).then(() => { parts.env = 1; loaded(); }).catch(() => { parts.env = 1; }).finally(doneOne);
     import('./foreman.mjs').then(({ loadForeman }) => loadForeman(Q.get('people') || 'assets/people/', (f) => { parts.foreman = f; loaded(); })).then((lib) => view.setPeople(lib)).catch(() => { /* the foreman made in code stays */ }).finally(() => { parts.foreman = 1; loaded(); doneOne(); });
-    import('./crowd.mjs').then(({ loadCrowd }) => loadCrowd(Q.get('people') || 'assets/people/')).then((c) => view.setCrowd(c)).catch(() => { /* no neighbours at the store, then */ });
+    const neighbours = () => import('./crowd.mjs').then(({ loadCrowd }) => loadCrowd(Q.get('people') || 'assets/people/')).then((c) => view.setCrowd(c)).catch(() => { /* no neighbours at the store, then */ });
+    if (PORTAL) whenPlaying = neighbours; else neighbours(); // a portal counts what loads before play starts: the crowd (7 MB) waits for the first game
   } else window.__loaded = true;
   // a shared replay link: #r=<the replay>
   if (location.hash.startsWith('#r=')) watch(location.hash.slice(3));
