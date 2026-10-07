@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://hollow-blocks.vercel.app/sitemap.xml
