@@ -19,7 +19,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 const SKIP = /^(hollowblocks|assets\/|data-|[a-z-]+\.(mjs|json|glb|mp3|png|jpg)$)|=>|\$\(|\btr\(/; // file names, keys, code
 const KEEP = new Set([ // the same in both: names, game words, English already
   'AUTO 3×', 'BAHAY', 'Best', 'HOLLOW BLOCKS', 'Bahay', 'Replay', 'Ranking', 'Account', 'Menu', 'REPLAY', 'Kapatas:', 'Phone:', 'Controller:', 'Bayanihan:',
-  'Space,', 'Streak:', 'Pagsasanay:', 'A falling-block game by', 'Lemmuel Turaya', 'More games', '☕ Support', 'Privacy', 'Sound', 'Difficulty', 'A house you built',
+  'Space,', 'Streak:', 'Pagsasanay:', 'A falling-block game by', 'Lemmuel Turaya', 'More games', '☕ Support', 'Privacy', 'About', 'How to play', 'Sound', 'Difficulty', 'A house you built',
   'Mode', 'Controls', 'Turn anticlockwise', 'Left', 'Soft drop', 'Right', 'Turn clockwise', 'Hard drop', 'Hold', 'Use a tool', 'Play or pause', 'Share',
   'Camera', 'Graphics', 'Auto', 'Normal', 'Brownout', 'Deadline', 'Daily', 'Rejected', 'Hollow block', 'Plywood', 'Adobe', 'Mason', 'Apartment', 'Condo Tower',
   'T-spin Triple', 'Combo ×10', 'Retro', 'Capiz', 'Barong', 'Jersey', 'Santa', 'Barangay', 'Makati', 'Beach Resort', 'Site', 'T-spin Single', 'T-spin Double',
